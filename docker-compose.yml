@@ -1,0 +1,7 @@
+services:
+  mindarcade:
+    build: .
+    container_name: mindarcade
+    restart: unless-stopped
+    ports:
+      - "8080:80" # point your homelab reverse proxy at http://<docker-host>:8080
