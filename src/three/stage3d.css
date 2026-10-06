@@ -1,0 +1,79 @@
+.stage3d {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.stage3d canvas {
+  display: block;
+  outline: none;
+}
+
+.stage3d-fallback {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 24px;
+  text-align: center;
+  color: var(--muted);
+  background: var(--surface-2);
+}
+
+/* Floating labels rendered with drei's <Html> */
+.label3d {
+  pointer-events: none;
+  white-space: nowrap;
+  font: 700 12px/1 var(--font);
+  color: #1f2937;
+  background: rgba(255, 255, 255, .92);
+  padding: 5px 9px;
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
+  transform: translateY(-4px);
+  animation: pop .15s ease-out;
+}
+
+.label3d.dark {
+  color: #fff;
+  background: rgba(17, 24, 39, .85);
+}
+
+.label3d.big {
+  font-size: 13px;
+  padding: 6px 12px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.pop3d {
+  pointer-events: none;
+  font: 800 20px/1 var(--font);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, .45);
+  animation: float-up3d .9s ease-out forwards;
+  white-space: nowrap;
+}
+
+.pop3d.ok { color: #fff; }
+.pop3d.bad { color: #fecaca; }
+
+@keyframes float-up3d {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(-40px); opacity: 0; }
+}
+
+.preview3d {
+  width: 100%;
+  height: 100%;
+}
+
+.label3d-anchor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 4;
+  pointer-events: none;
+  will-change: transform;
+}

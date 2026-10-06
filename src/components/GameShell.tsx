@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { Suspense, useState, type CSSProperties } from 'react';
 import type { GameMeta, GameResult } from '../lib/types';
 import { bestScore, gameHistory, saveResult } from '../lib/storage';
 import { ArrowLeft, ClockIcon, PlayIcon, TargetIcon } from './Icons';
@@ -51,7 +51,9 @@ export default function GameShell({ game }: { game: GameMeta }) {
           </div>
           <span className="play-bar-spacer" />
         </div>
-        <game.Component key={run} onFinish={finish} />
+        <Suspense fallback={<div className="stage game-loading">Loading game…</div>}>
+          <game.Component key={run} onFinish={finish} />
+        </Suspense>
       </div>
     );
 

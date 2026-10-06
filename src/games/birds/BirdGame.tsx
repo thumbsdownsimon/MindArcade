@@ -1,32 +1,16 @@
-import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
 import type { GameProps, GameResult } from '../../lib/types';
-import { clamp, mean, pick, randInt, scale, shuffle, pct, secs } from '../../lib/util';
-import { useKeyDown } from '../../lib/hooks';
+import { mean, pick, scale, shuffle, pct, secs } from '../../lib/util';
+import { bird, type BirdLook } from '../../three/models';
+import { flatParts, snapshot } from '../../three/voxel';
+import ModelPreview from '../../three/ModelPreview';
+import BirdScene, { MAX_DIST, MIN_DIST, placeBirds, type BirdSim, type CamState, type PopMsg } from './BirdScene';
+import { COLS, ROWS, TILE, WORLD_D, WORLD_W, ZONE_NAME, ZONE_TILES, buildWorld, type World } from './world';
 import './birds.css';
 
-type BColor = 'red' | 'blue' | 'yellow';
-
-interface Species {
+interface Species extends BirdLook {
   id: number;
   name: string;
-  color: BColor;
-  crest: boolean;
-}
-
-interface Bird {
-  id: number;
-  species: number;
-  x: number;
-  y: number;
-  facing: 'left' | 'right';
-  found: boolean;
-}
-
-interface Decor {
-  kind: 'tree' | 'pine' | 'bush' | 'flower' | 'rock' | 'pond';
-  x: number;
-  y: number;
-  size: number;
 }
 
 interface ClickRec {
@@ -34,87 +18,96 @@ interface ClickRec {
   correct: boolean;
 }
 
-const WORLD_W = 2400;
-const WORLD_H = 1600;
-const VIEW_H = 430;
+const VIEW_H = 470;
 const GAME_MS = 180_000;
-const PER_SPECIES = 11;
-const MINI_SCALE = 0.06;
+const PER_SPECIES = 16;
 const PLUS = 10;
 const MINUS = 5;
+const MINI_PX = 4; // minimap pixels per tile
 
 const SPECIES: Species[] = [
-  { id: 0, name: 'Crimson Crest', color: 'red', crest: true },
-  { id: 1, name: 'Ruby Finch', color: 'red', crest: false },
-  { id: 2, name: 'Blue Jay', color: 'blue', crest: true },
-  { id: 3, name: 'Bluebird', color: 'blue', crest: false },
-  { id: 4, name: 'Golden Crest', color: 'yellow', crest: true },
-  { id: 5, name: 'Canary', color: 'yellow', crest: false },
+  { id: 0, name: 'Crimson Crest', main: '#e11d48', dark: '#9f1239', crest: true },
+  { id: 1, name: 'Ruby Finch', main: '#e11d48', dark: '#9f1239', crest: false },
+  { id: 2, name: 'Blue Jay', main: '#2563eb', dark: '#1e3a8a', crest: true },
+  { id: 3, name: 'Bluebird', main: '#2563eb', dark: '#1e3a8a', crest: false },
+  { id: 4, name: 'Golden Crest', main: '#eab308', dark: '#a16207', crest: true },
+  { id: 5, name: 'Canary', main: '#eab308', dark: '#a16207', crest: false },
 ];
 
-const COLORS: Record<BColor, [string, string]> = {
-  red: ['#e11d48', '#9f1239'],
-  blue: ['#2563eb', '#1e3a8a'],
-  yellow: ['#eab308', '#a16207'],
-};
+const MODELS = SPECIES.map((s) => bird(s));
 
-export function BirdSvg({ color, crest, facing = 'right', size = 40 }: { color: BColor; crest: boolean; facing?: 'left' | 'right'; size?: number }) {
-  const [main, dark] = COLORS[color];
+/** Side-on rendered picture of a species, for the HUD. */
+function SpeciesIcon({ s, size }: { s: Species; size: number }) {
+  const src = useMemo(() => snapshot(`bird-icon-${s.id}`, flatParts(MODELS[s.id]), { yaw: -1.25, pitch: 0.2, w: 128, h: 104 }), [s.id]);
+  return src ? <img src={src} width={size} height={size * 0.8} alt="" style={{ display: 'block', objectFit: 'contain' }} /> : null;
+}
+
+function Minimap({ world, cam, found }: { world: World; cam: React.MutableRefObject<CamState>; found: { x: number; z: number }[] }) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const view = useRef<HTMLSpanElement>(null);
+  const s = MINI_PX / TILE; // minimap px per world unit
+
+  useEffect(() => {
+    const ctx = canvas.current?.getContext('2d');
+    if (!ctx) return;
+    world.tileColor.forEach((c, i) => {
+      ctx.fillStyle = c;
+      ctx.fillRect((i % COLS) * MINI_PX, Math.floor(i / COLS) * MINI_PX, MINI_PX, MINI_PX);
+    });
+  }, [world]);
+
+  // Follow the camera without re-rendering React every frame.
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      const v = view.current;
+      if (v) {
+        const c = cam.current;
+        const w = c.dist * 1.5 * s;
+        const h = c.dist * 1.0 * s;
+        v.style.width = `${w}px`;
+        v.style.height = `${h}px`;
+        v.style.transform = `translate(${c.x * s - w / 2}px, ${c.z * s - h / 2}px) rotate(${-c.yaw}rad)`;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [cam, s]);
+
+  function jump(e: RPointerEvent<HTMLDivElement>) {
+    const r = e.currentTarget.getBoundingClientRect();
+    // Use the on-screen size, since the minimap is scaled down on small screens.
+    cam.current.x = ((e.clientX - r.left) / r.width) * WORLD_W;
+    cam.current.z = ((e.clientY - r.top) / r.height) * WORLD_D;
+  }
+
   return (
-    <svg viewBox="0 0 60 50" width={size} height={size * (50 / 60)} aria-hidden="true"
-      style={{ transform: facing === 'left' ? 'scaleX(-1)' : undefined, display: 'block' }}>
-      <path d="M8 30 L0 24 L2 36 Z" fill={dark} />
-      <ellipse cx="26" cy="31" rx="17" ry="12" fill={main} />
-      <ellipse cx="24" cy="29" rx="10" ry="6.5" fill={dark} opacity=".85" />
-      <circle cx="42" cy="20" r="9" fill={main} />
-      {crest && <path d="M37 13 L36 3 L41 10 L43 2 L45 11 L49 6 L46 15 Z" fill={dark} />}
-      <path d="M50 18 L59 21 L50 24 Z" fill="#f59e0b" />
-      <circle cx="45" cy="18" r="2.6" fill="#fff" />
-      <circle cx="45.8" cy="18" r="1.4" fill="#0f172a" />
-      <path d="M22 43 L22 48 M30 43 L30 48" stroke="#78350f" strokeWidth="2" strokeLinecap="round" />
-    </svg>
+    <div className="minimap" style={{ width: COLS * MINI_PX, height: ROWS * MINI_PX }} onPointerDown={(e) => { e.stopPropagation(); jump(e); }}>
+      <canvas ref={canvas} width={COLS * MINI_PX} height={ROWS * MINI_PX} />
+      {world.zones.map((z) => (
+        <span key={z.kind} className="mini-zone" style={{ left: (z.col + 0.5) * ZONE_TILES * MINI_PX, top: (z.row + 0.5) * ZONE_TILES * MINI_PX }}>
+          {ZONE_NAME[z.kind]}
+        </span>
+      ))}
+      {found.map((f, i) => (
+        <span key={i} className="mini-found" style={{ left: f.x * s, top: f.z * s }} />
+      ))}
+      <span ref={view} className="mini-view" />
+    </div>
   );
 }
 
-function buildWorld() {
-  const decor: Decor[] = [];
-  for (let i = 0; i < 5; i++) decor.push({ kind: 'pond', x: randInt(150, WORLD_W - 350), y: randInt(150, WORLD_H - 250), size: randInt(160, 280) });
-  for (let i = 0; i < 70; i++)
-    decor.push({
-      kind: pick(['tree', 'tree', 'pine', 'bush', 'bush', 'flower', 'rock'] as const),
-      x: randInt(20, WORLD_W - 60),
-      y: randInt(20, WORLD_H - 60),
-      size: randInt(34, 64),
-    });
-  const birds: Bird[] = [];
-  const order = shuffle(SPECIES.flatMap((s) => Array(PER_SPECIES).fill(s.id) as number[]));
-  for (const species of order) {
-    let x = 0, y = 0;
-    for (let tries = 0; tries < 200; tries++) {
-      x = randInt(40, WORLD_W - 60);
-      y = randInt(40, WORLD_H - 60);
-      if (birds.every((b) => Math.hypot(b.x - x, b.y - y) > 75)) break;
-    }
-    birds.push({ id: birds.length, species, x, y, facing: pick(['left', 'right'] as const), found: false });
-  }
-  return { decor, birds };
-}
-
-const DECOR_EMOJI = { tree: '🌳', pine: '🌲', bush: '🌿', flower: '🌼', rock: '🪨' };
-
 export default function BirdGame({ onFinish }: GameProps) {
   const [world] = useState(buildWorld);
-  const [birds, setBirds] = useState(world.birds);
+  const birds = useRef<BirdSim[]>([]);
+  if (!birds.current.length) birds.current = placeBirds(world.perches, shuffle(SPECIES.flatMap((s) => Array(PER_SPECIES).fill(s.id) as number[])));
+  const cam = useRef<CamState>({ x: WORLD_W / 2, z: WORLD_D / 2, yaw: 0, dist: 24 });
   const [target, setTarget] = useState<number | null>(null);
-  const [pos, setPos] = useState({ x: WORLD_W / 2 - 450, y: WORLD_H / 2 - VIEW_H / 2 });
-  const [viewW, setViewW] = useState(900);
   const [elapsed, setElapsed] = useState(0);
   const [points, setPoints] = useState(0);
-  const [pops, setPops] = useState<{ id: number; x: number; y: number; text: string; ok: boolean }[]>([]);
-  const [wrongId, setWrongId] = useState<number | null>(null);
-  const [dragging, setDragging] = useState(false);
-  const viewRef = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ sx: number; sy: number; px: number; py: number; moved: boolean } | null>(null);
+  const [pops, setPops] = useState<PopMsg[]>([]);
+  const [found, setFound] = useState<{ x: number; z: number; species: number }[]>([]);
   const startT = useRef(0);
   const clicks = useRef<ClickRec[]>([]);
   const switches = useRef<{ t: number; dry: number }[]>([]);
@@ -122,22 +115,8 @@ export default function BirdGame({ onFinish }: GameProps) {
   const ended = useRef(false);
   const popId = useRef(0);
   const started = target !== null;
-
-  const clampPos = (x: number, y: number, w = viewW) => ({
-    x: clamp(x, 0, Math.max(0, WORLD_W - w)),
-    y: clamp(y, 0, WORLD_H - VIEW_H),
-  });
-
-  useLayoutEffect(() => {
-    const el = viewRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => {
-      setViewW(el.clientWidth);
-      setPos((p) => clampPos(p.x, p.y, el.clientWidth));
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+  const targetRef = useRef(target);
+  targetRef.current = target;
 
   useEffect(() => {
     if (!started) return;
@@ -153,10 +132,8 @@ export default function BirdGame({ onFinish }: GameProps) {
     if (ended.current) return;
     ended.current = true;
     const e = Math.min(GAME_MS, performance.now() - startT.current);
-    onFinish(analyse(clicks.current, switches.current, e, birdsRef.current));
+    onFinish(analyse(clicks.current, switches.current, e, birds.current));
   }
-  const birdsRef = useRef(birds);
-  birdsRef.current = birds;
 
   function chooseTarget(id: number) {
     if (ended.current || id === target) return;
@@ -176,68 +153,29 @@ export default function BirdGame({ onFinish }: GameProps) {
     chooseTarget(pick(SPECIES.filter((s) => s.id !== target)).id);
   }
 
-  function clickBird(b: Bird) {
-    if (!started || ended.current || b.found || drag.current?.moved) return;
-    const correct = b.species === target;
+  // Called from the 3D scene's pointer handler, so it reads the target through a ref.
+  function clickBird(id: number) {
+    const b = birds.current[id];
+    if (targetRef.current === null || ended.current || b.found) return;
+    const correct = b.species === targetRef.current;
     const now = performance.now();
     clicks.current.push({ t: now - startT.current, correct });
     const pid = ++popId.current;
-    setPops((p) => [...p, { id: pid, x: b.x, y: b.y, text: correct ? `+${PLUS}` : `−${MINUS}`, ok: correct }]);
+    setPops((p) => [...p, { id: pid, x: b.pos.x, y: b.pos.y, z: b.pos.z, text: correct ? `+${PLUS}` : `−${MINUS}`, ok: correct }]);
     window.setTimeout(() => setPops((p) => p.filter((x) => x.id !== pid)), 900);
     if (correct) {
       lastFind.current = now;
+      b.found = true;
       setPoints((p) => p + PLUS);
-      setBirds((bs) => bs.map((x) => (x.id === b.id ? { ...x, found: true } : x)));
+      setFound((f) => [...f, { x: b.pos.x, z: b.pos.z, species: b.species }]);
     } else {
+      b.wrongT = -1;
       setPoints((p) => p - MINUS);
-      setWrongId(b.id);
-      window.setTimeout(() => setWrongId((w) => (w === b.id ? null : w)), 450);
     }
   }
 
-  function onPointerDown(e: RPointerEvent) {
-    if (e.button !== 0) return;
-    drag.current = { sx: e.clientX, sy: e.clientY, px: pos.x, py: pos.y, moved: false };
-    const move = (ev: PointerEvent) => {
-      const d = drag.current;
-      if (!d) return;
-      const dx = ev.clientX - d.sx;
-      const dy = ev.clientY - d.sy;
-      if (!d.moved && Math.hypot(dx, dy) > 5) {
-        d.moved = true;
-        setDragging(true);
-      }
-      if (d.moved) setPos(clampPos(d.px - dx, d.py - dy));
-    };
-    const up = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      setDragging(false);
-      // Let the click event (which fires after pointerup) see `moved`, then clear.
-      window.setTimeout(() => (drag.current = null), 0);
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-  }
-
-  useKeyDown((e) => {
-    const step = 90;
-    const k = e.key.toLowerCase();
-    const d = { arrowleft: [-step, 0], a: [-step, 0], arrowright: [step, 0], d: [step, 0], arrowup: [0, -step], w: [0, -step], arrowdown: [0, step], s: [0, step] }[k];
-    if (d) {
-      e.preventDefault();
-      setPos((p) => clampPos(p.x + d[0], p.y + d[1]));
-    }
-  });
-
-  function jumpMini(e: RPointerEvent<HTMLDivElement>) {
-    const r = e.currentTarget.getBoundingClientRect();
-    const wx = (e.clientX - r.left) / MINI_SCALE;
-    const wy = (e.clientY - r.top) / MINI_SCALE;
-    setPos(clampPos(wx - viewW / 2, wy - VIEW_H / 2));
-  }
-
-  const foundOf = (s: number) => birds.filter((b) => b.species === s && b.found).length;
+  const nudge = (fn: (c: CamState) => void) => () => fn(cam.current);
+  const foundOf = (s: number) => found.filter((f) => f.species === s).length;
   const remaining = Math.max(0, GAME_MS - elapsed);
   const correct = clicks.current.filter((c) => c.correct).length;
   const wrong = clicks.current.length - correct;
@@ -260,7 +198,7 @@ export default function BirdGame({ onFinish }: GameProps) {
           {tgt && (
             <span className="target-chip">
               <span className="muted small">Looking for</span>
-              <BirdSvg color={tgt.color} crest={tgt.crest} size={30} />
+              <SpeciesIcon s={tgt} size={34} />
               <strong>{tgt.name}</strong>
             </span>
           )}
@@ -273,63 +211,26 @@ export default function BirdGame({ onFinish }: GameProps) {
       </div>
 
       <div className="birds-layout">
-        <div
-          ref={viewRef}
-          className={`bird-viewport ${dragging ? 'is-dragging' : ''}`}
-          style={{ height: VIEW_H }}
-          onPointerDown={onPointerDown}
-        >
-          <div className="bird-world" style={{ width: WORLD_W, height: WORLD_H, transform: `translate(${-pos.x}px, ${-pos.y}px)` }}>
-            {world.decor.map((d, i) =>
-              d.kind === 'pond' ? (
-                <div key={i} className="map-pond" style={{ left: d.x, top: d.y, width: d.size, height: d.size * 0.6 }} />
-              ) : (
-                <span key={i} className="map-decor" style={{ left: d.x, top: d.y, fontSize: d.size }}>
-                  {DECOR_EMOJI[d.kind]}
-                </span>
-              ),
-            )}
-            {birds.map((b) => {
-              const s = SPECIES[b.species];
-              return (
-                <button
-                  key={b.id}
-                  className={`map-bird ${b.found ? 'is-found' : ''} ${wrongId === b.id ? 'is-wrong' : ''}`}
-                  style={{ left: b.x, top: b.y }}
-                  onClick={() => clickBird(b)}
-                  aria-label="Bird"
-                >
-                  <BirdSvg color={s.color} crest={s.crest} facing={b.facing} size={38} />
-                  {b.found && <span className="found-check">✓</span>}
-                </button>
-              );
-            })}
-            {pops.map((p) => (
-              <span key={p.id} className={`score-pop ${p.ok ? 'ok' : 'bad'}`} style={{ left: p.x + 18, top: p.y - 6 }}>
-                {p.text}
-              </span>
-            ))}
+        <div className="bird-viewport" style={{ height: VIEW_H }}>
+          <BirdScene world={world} birds={birds} models={MODELS} cam={cam} onPick={clickBird} enabled={started} pops={pops} />
+
+          <div className="cam-buttons">
+            <button className="cam-btn" title="Rotate left (Q)" onClick={nudge((c) => (c.yaw += Math.PI / 4))}>⟲</button>
+            <button className="cam-btn" title="Rotate right (E)" onClick={nudge((c) => (c.yaw -= Math.PI / 4))}>⟳</button>
+            <button className="cam-btn" title="Zoom in (+)" onClick={nudge((c) => (c.dist = Math.max(MIN_DIST, c.dist * 0.75)))}>+</button>
+            <button className="cam-btn" title="Zoom out (−)" onClick={nudge((c) => (c.dist = Math.min(MAX_DIST, c.dist / 0.75)))}>−</button>
           </div>
 
-          <div className="minimap" onPointerDown={(e) => { e.stopPropagation(); jumpMini(e); }}
-            style={{ width: WORLD_W * MINI_SCALE, height: WORLD_H * MINI_SCALE }}>
-            {world.decor.filter((d) => d.kind === 'pond').map((d, i) => (
-              <span key={i} className="mini-pond" style={{ left: d.x * MINI_SCALE, top: d.y * MINI_SCALE, width: d.size * MINI_SCALE, height: d.size * 0.6 * MINI_SCALE }} />
-            ))}
-            {birds.filter((b) => b.found).map((b) => (
-              <span key={b.id} className="mini-found" style={{ left: b.x * MINI_SCALE, top: b.y * MINI_SCALE }} />
-            ))}
-            <span className="mini-view" style={{ left: pos.x * MINI_SCALE, top: pos.y * MINI_SCALE, width: viewW * MINI_SCALE, height: VIEW_H * MINI_SCALE }} />
-          </div>
+          <Minimap world={world} cam={cam} found={found} />
 
           {!started && (
-            <div className="overlay" onPointerDown={(e) => e.stopPropagation()}>
+            <div className="overlay">
               <div className="overlay-card">
                 <span className="eyebrow">Bird watching</span>
                 <h3>Find as many birds as you can</h3>
                 <p>
-                  You'll be given a random bird to look for. Correct birds earn +{PLUS}, wrong ones cost −{MINUS}. Ask for a new
-                  bird whenever you like. You have 3 minutes.
+                  You'll be given a random bird to look for. Correct birds earn +{PLUS}, wrong ones cost −{MINUS}. Birds hide in tree
+                  tops, under trees, behind houses and in tall grass, so rotate and zoom to look around. You have 3 minutes.
                 </p>
                 <button className="btn btn-primary" onClick={newBird}>
                   Start spotting
@@ -345,35 +246,21 @@ export default function BirdGame({ onFinish }: GameProps) {
             {tgt ? (
               <>
                 <div className="your-bird-img">
-                  <BirdSvg color={tgt.color} crest={tgt.crest} size={84} />
+                  <ModelPreview key={tgt.id} id={`bird-${tgt.id}`} model={MODELS[tgt.id]} height={0.9} distance={2.4} flap />
                 </div>
                 <strong className="your-bird-name">{tgt.name}</strong>
-                <span className="muted small">
-                  {tgt.crest ? 'Has a crest' : 'No crest'} · found {foundOf(tgt.id)}
-                </span>
+                <span className="muted small">Found {foundOf(tgt.id)}</span>
                 <button className="btn btn-secondary" onClick={newBird}>
-                  🔄 Give me a new bird
+                  Give me a new bird
                 </button>
               </>
             ) : (
-              <span className="muted small">You'll get a random bird when you start.</span>
+              <span className="muted small">You'll get a random bird when you start. Other species are only revealed when you ask for a new bird.</span>
             )}
           </div>
-          <div className="species-title">Field guide</div>
-          <div className="guide">
-            {SPECIES.map((s) => (
-              <div key={s.id} className={`species ${target === s.id ? 'is-active' : ''}`}>
-                <span className="species-img">
-                  <BirdSvg color={s.color} crest={s.crest} size={32} />
-                </span>
-                <span className="species-info">
-                  <strong>{s.name}</strong>
-                  <span className="muted small">found {foundOf(s.id)}</span>
-                </span>
-              </div>
-            ))}
-          </div>
-          <p className="muted small">Drag the map or use the arrow keys / WASD. Click the minimap to jump.</p>
+          <p className="muted small">
+            Drag to move · right-drag or Q/E to rotate · scroll to zoom · WASD/arrows also move. Click the minimap to jump.
+          </p>
         </aside>
       </div>
     </div>
@@ -382,7 +269,7 @@ export default function BirdGame({ onFinish }: GameProps) {
 
 /* ---------- Analysis ---------- */
 
-function analyse(clicks: ClickRec[], switches: { t: number; dry: number }[], elapsedMs: number, birds: Bird[]): GameResult {
+function analyse(clicks: ClickRec[], switches: { t: number; dry: number }[], elapsedMs: number, birds: BirdSim[]): GameResult {
   const correct = clicks.filter((c) => c.correct).length;
   const wrong = clicks.length - correct;
   const acc = clicks.length ? correct / clicks.length : 0;

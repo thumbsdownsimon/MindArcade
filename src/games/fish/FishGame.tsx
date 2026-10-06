@@ -1,19 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GameProps, GameResult } from '../../lib/types';
 import { mean, pick, shuffle, pct, secs } from '../../lib/util';
 import { useTimeouts } from '../../lib/hooks';
+import FishScene, { type PadView } from './FishScene';
+import { groupPicture, type Group } from './fishLook';
 import './fish.css';
 
-type FColor = 'orange' | 'purple' | 'blue' | 'yellow';
-type Pattern = 'stripes' | 'spots' | 'plain';
 type QType = 'where' | 'forward' | 'reverse' | 'most' | 'total' | 'last';
-
-interface Group {
-  spot: number;
-  color: FColor;
-  pattern: Pattern;
-  count: number;
-}
 
 interface Round {
   len: number;
@@ -45,13 +38,6 @@ const PLAN: [number, QType][] = [
   [3, 'where'], [3, 'forward'], [4, 'most'], [4, 'total'], [5, 'where'],
   [5, 'reverse'], [6, 'last'], [6, 'most'], [7, 'reverse'], [7, 'where'],
 ];
-
-const COLORS: Record<FColor, [string, string]> = {
-  orange: ['#fb923c', '#c2410c'],
-  purple: ['#a78bfa', '#6d28d9'],
-  blue: ['#60a5fa', '#1d4ed8'],
-  yellow: ['#facc15', '#a16207'],
-};
 
 const PROMPT: Record<QType, string> = {
   where: 'Where did this fish group appear?',
@@ -107,53 +93,10 @@ function buildRound(len: number, type: QType): Round {
   }
 }
 
-export function FishSvg({ color, pattern, size = 46, uid }: { color: FColor; pattern: Pattern; size?: number; uid: string }) {
-  const [main, dark] = COLORS[color];
-  const clip = `fc-${uid}`;
-  return (
-    <svg viewBox="0 0 120 80" width={size} height={size * (80 / 120)} aria-hidden="true" style={{ display: 'block' }}>
-      <defs>
-        <clipPath id={clip}>
-          <ellipse cx="58" cy="42" rx="40" ry="24" />
-        </clipPath>
-      </defs>
-      <path d="M22 42 L2 22 L8 42 L2 62 Z" fill={dark} />
-      <path d="M40 22 Q56 0 74 22 Z" fill={dark} />
-      <ellipse cx="58" cy="42" rx="40" ry="24" fill={main} />
-      <g clipPath={`url(#${clip})`} fill={dark} opacity=".6">
-        {pattern === 'stripes' && (
-          <>
-            <rect x="34" y="10" width="8" height="70" />
-            <rect x="51" y="10" width="8" height="70" />
-            <rect x="68" y="10" width="8" height="70" />
-          </>
-        )}
-        {pattern === 'spots' && (
-          <>
-            <circle cx="40" cy="34" r="6" />
-            <circle cx="55" cy="51" r="6" />
-            <circle cx="68" cy="31" r="5" />
-            <circle cx="42" cy="55" r="4" />
-          </>
-        )}
-      </g>
-      <ellipse cx="58" cy="42" rx="40" ry="24" fill="none" stroke={dark} strokeWidth="2.5" />
-      <circle cx="84" cy="36" r="6" fill="#fff" />
-      <circle cx="86" cy="36" r="3" fill="#0f172a" />
-    </svg>
-  );
-}
-
-function FishGroup({ g, size = 56, uid }: { g: Group; size?: number; uid: string }) {
-  return (
-    <span className={`fish-group n${g.count}`}>
-      {Array.from({ length: g.count }, (_, i) => (
-        <span key={i} className="fish-one">
-          <FishSvg color={g.color} pattern={g.pattern} size={size} uid={`${uid}-${i}`} />
-        </span>
-      ))}
-    </span>
-  );
+/** Rendered 3D picture of a fish group, used in the question panel. */
+function FishGroup({ g, width }: { g: Group; width: number }) {
+  const src = useMemo(() => groupPicture(g), [g.color, g.pattern, g.count]);
+  return src ? <img className="fish-pic" src={src} width={width} height={width * (140 / 220)} alt={`${g.count} ${g.color} ${g.pattern} fish`} /> : null;
 }
 
 export default function FishGame({ onFinish }: GameProps) {
@@ -244,6 +187,24 @@ export default function FishGame({ onFinish }: GameProps) {
   const areaClickable = phase === 'question' && round.type === 'most';
   const correctOrder = round.type === 'reverse' ? [...round.seq].reverse() : round.seq;
 
+  // What each lily pad shows: tap order while answering, and the right answer afterwards.
+  const pads: PadView[] = SPOTS.map((_, i) => {
+    const tapIdx = taps.indexOf(i);
+    const isAnswer =
+      reveal &&
+      ((round.type === 'where' && round.seq[round.focus!].spot === i) ||
+        ((round.type === 'forward' || round.type === 'reverse') && round.seq.some((g) => g.spot === i)));
+    const wrong = reveal && round.type === 'where' && fb?.picked === i && fb.credit === 0;
+    if (reveal && isAnswer && (round.type === 'forward' || round.type === 'reverse')) {
+      const n = correctOrder.findIndex((g) => g.spot === i) + 1;
+      return { mark: 'answer', label: String(n), tone: taps[n - 1] === i ? 'ok' : 'bad' };
+    }
+    if (isAnswer) return { mark: 'answer' };
+    if (wrong) return { mark: 'wrong' };
+    if (tapIdx >= 0 && !reveal) return { label: String(tapIdx + 1), tone: 'accent' };
+    return {};
+  });
+
   return (
     <div className="stage fish-stage">
       <div className="hud">
@@ -262,59 +223,18 @@ export default function FishGame({ onFinish }: GameProps) {
 
       <div className="pond-wrap">
         <div className="pond">
-          <div className="pond-cross v" />
-          <div className="pond-cross h" />
-          {AREAS.map((a, i) => (
-            <button
-              key={a}
-              className={['pond-area', `a${i}`, areaClickable && 'is-clickable', reveal && round.type === 'most' && fb?.picked === i && 'is-picked']
-                .filter(Boolean)
-                .join(' ')}
-              onClick={() => answerArea(i)}
-              disabled={!areaClickable}
-            >
-              <span className="area-label">{a}</span>
-            </button>
-          ))}
-
-          {SPOTS.map((s, i) => {
-            const tapIdx = taps.indexOf(i);
-            const isAnswer =
-              reveal &&
-              ((round.type === 'where' && round.seq[round.focus!].spot === i) ||
-                ((round.type === 'forward' || round.type === 'reverse') && round.seq.some((g) => g.spot === i)));
-            const orderNum = correctOrder.findIndex((g) => g.spot === i) + 1;
-            return (
-              <button
-                key={i}
-                className={[
-                  'lily',
-                  spotClickable && 'is-clickable',
-                  isAnswer && 'is-answer',
-                  reveal && round.type === 'where' && fb?.picked === i && fb.credit === 0 && 'is-wrong',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-                style={{ left: `${s.x}%`, top: `${s.y}%` }}
-                onClick={() => answerSpot(i)}
-                disabled={!spotClickable}
-                aria-label={`Spot ${i + 1}`}
-              >
-                {tapIdx >= 0 && !reveal && <span className="tap-num">{tapIdx + 1}</span>}
-                {reveal && isAnswer && (round.type === 'forward' || round.type === 'reverse') && (
-                  <span className={`tap-num ${taps[orderNum - 1] === i ? 'ok' : 'bad'}`}>{orderNum}</span>
-                )}
-              </button>
-            );
-          })}
-
-          {visible && (
-            <div key={step} className="fish-appear" style={{ left: `${SPOTS[visible.spot].x}%`, top: `${SPOTS[visible.spot].y}%` }}>
-              <FishGroup g={visible} uid={`show-${ri}-${step}`} />
-            </div>
-          )}
-
-          {phase === 'ready' && <div className="pond-banner">Watch closely…</div>}
+          <FishScene
+            spots={SPOTS}
+            areas={AREAS}
+            pads={pads}
+            spotClickable={spotClickable}
+            areaClickable={areaClickable}
+            pickedArea={reveal && round.type === 'most' ? (fb?.picked ?? null) : null}
+            visible={visible ? { group: visible, key: `${ri}-${step}` } : null}
+            banner={phase === 'ready' ? 'Watch closely…' : null}
+            onSpot={answerSpot}
+            onArea={answerArea}
+          />
 
           {phase === 'intro' && (
             <div className="overlay">
@@ -322,8 +242,9 @@ export default function FishGame({ onFinish }: GameProps) {
                 <span className="eyebrow">Memory pond</span>
                 <h3>Remember the fish</h3>
                 <p>
-                  Groups of fish pop up one by one on the lily pads. Remember <strong>where</strong>, <strong>in which order</strong>,{' '}
-                  <strong>how many</strong> and <strong>what they looked like</strong>. You won't know the question until the end.
+                  Groups of fish leap out of the water by the lily pads, one at a time. Remember <strong>where</strong>,{' '}
+                  <strong>in which order</strong>, <strong>how many</strong> and <strong>what they looked like</strong>. You won't know the
+                  question until the end.
                 </p>
                 <button className="btn btn-primary" onClick={() => setPhase('ready')}>
                   Start
@@ -340,7 +261,7 @@ export default function FishGame({ onFinish }: GameProps) {
               <h3 className="q-text">{PROMPT[round.type]}</h3>
               {round.type === 'where' && (
                 <div className="q-fish">
-                  <FishGroup g={round.seq[round.focus!]} size={56} uid={`q-${ri}`} />
+                  <FishGroup g={round.seq[round.focus!]} width={170} />
                 </div>
               )}
               {(round.type === 'forward' || round.type === 'reverse') && phase === 'question' && (
@@ -388,7 +309,7 @@ export default function FishGame({ onFinish }: GameProps) {
                       onClick={() => answerOption(gi)}
                       disabled={phase !== 'question'}
                     >
-                      <FishGroup g={round.seq[gi]} size={40} uid={`o-${ri}-${gi}`} />
+                      <FishGroup g={round.seq[gi]} width={110} />
                     </button>
                   ))}
                 </div>

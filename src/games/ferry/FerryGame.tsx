@@ -1,9 +1,11 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { GameProps, GameResult } from '../../lib/types';
 import { mean, sum, pct, secs } from '../../lib/util';
 import { useTimeouts } from '../../lib/hooks';
 import { RetryIcon } from '../../components/Icons';
 import { EATS, LABEL, boatProblem, conflict, cross, leftBehind, minCrossings, type Kind, type Puzzle, type State } from './engine';
+import { flatParts, snapshot } from '../../three/voxel';
+import FerryScene, { SAIL_MS, lookFor } from './FerryScene';
 import './ferry.css';
 
 const PUZZLES: Puzzle[] = [
@@ -17,7 +19,6 @@ const PUZZLES: Puzzle[] = [
   { title: 'School outing', kinds: ['adult', 'adult', 'adult', 'kid', 'kid', 'kid'], capacity: 2 },
 ];
 
-const EMOJI: Record<Kind, string> = { fox: '🦊', blackfox: '🦊', chicken: '🐔', larva: '🐛', adult: '🧔', kid: '👧' };
 
 interface Rec {
   min: number;
@@ -28,13 +29,13 @@ interface Rec {
   totalMs: number;
 }
 
-function Token({ kind, onClick, disabled }: { kind: Kind; onClick?: () => void; disabled?: boolean }) {
-  return (
-    <button className={`token kind-${kind}`} onClick={onClick} disabled={disabled} title={LABEL[kind]}>
-      <span className="token-emoji">{EMOJI[kind]}</span>
-      <span className="token-label">{LABEL[kind]}</span>
-    </button>
-  );
+/** A small rendered portrait of a character, for the rule chips. */
+function Portrait({ kind }: { kind: Kind }) {
+  const src = useMemo(() => {
+    const look = lookFor([kind], 0);
+    return snapshot(`portrait-${look.id}`, flatParts(look.model), { yaw: -0.7, pitch: 0.25, w: 96, h: 96 });
+  }, [kind]);
+  return src ? <img className="portrait" src={src} alt="" /> : null;
 }
 
 function Rules({ p }: { p: Puzzle }) {
@@ -44,11 +45,15 @@ function Rules({ p }: { p: Puzzle }) {
     .flatMap((k) => EATS[k]!.filter((v) => present.has(v)).map((v) => [k, v] as const));
   return (
     <div className="rules">
-      <span className="rule-chip">🧑‍✈️ Sailor + {p.capacity} seat{p.capacity > 1 ? 's' : ''}</span>
-      {present.has('kid') && <span className="rule-chip warn">👧 A kid can never travel as the only passenger</span>}
+      <span className="rule-chip">Sailor + {p.capacity} seat{p.capacity > 1 ? 's' : ''}</span>
+      {present.has('kid') && (
+        <span className="rule-chip warn">
+          <Portrait kind="kid" /> A kid can never travel as the only passenger
+        </span>
+      )}
       {pairs.map(([a, b]) => (
         <span key={a + b} className="rule-chip warn">
-          <span className={`mini kind-${a}`}>{EMOJI[a]}</span> eats <span className="mini">{EMOJI[b]}</span>
+          <Portrait kind={a} /> {LABEL[a]} eats <Portrait kind={b} /> {LABEL[b].toLowerCase()}
         </span>
       ))}
     </div>
@@ -66,7 +71,7 @@ export default function FerryGame({ onFinish }: GameProps) {
   const [crossings, setCrossings] = useState(0);
   const [failures, setFailures] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
-  const [eaten, setEaten] = useState<string | null>(null);
+  const [eaten, setEaten] = useState<{ pair: [number, number]; text: string } | null>(null);
   const [banner, setBanner] = useState<{ ok: boolean; title: string; text: string } | null>(null);
   const t0 = useRef(performance.now());
   const firstSail = useRef<number | null>(null);
@@ -84,7 +89,7 @@ export default function FerryGame({ onFinish }: GameProps) {
   function toggle(i: number) {
     if (busy) return;
     if (load.includes(i)) return setLoad(load.filter((x) => x !== i));
-    if (st.side[i] !== st.boat) return;
+    if (st.side[i] !== st.boat) return say('The boat is on the other side of the river.');
     if (load.length >= p.capacity) return say(`The boat only has ${p.capacity} seat${p.capacity > 1 ? 's' : ''}.`);
     setLoad([...load, i]);
   }
@@ -101,7 +106,7 @@ export default function FerryGame({ onFinish }: GameProps) {
     later(() => {
       if (danger) {
         const [a, b] = danger;
-        setEaten(`While the sailor was away, the ${LABEL[p.kinds[a]].toLowerCase()} ate the ${LABEL[p.kinds[b]].toLowerCase()}!`);
+        setEaten({ pair: [a, b], text: `While the sailor was away, the ${LABEL[p.kinds[a]].toLowerCase()} ate the ${LABEL[p.kinds[b]].toLowerCase()}!` });
         setFailures((f) => f + 1);
         return;
       }
@@ -110,7 +115,7 @@ export default function FerryGame({ onFinish }: GameProps) {
       setSt(next);
       setSailing(false);
       if (next.side.every((s) => s === 1)) complete(true, used);
-    }, 950);
+    }, SAIL_MS);
   }
 
   function retry() {
@@ -157,7 +162,7 @@ export default function FerryGame({ onFinish }: GameProps) {
       setBanner(null);
       t0.current = performance.now();
       firstSail.current = null;
-    }, 2000);
+    }, 2800);
   }
 
   const bank = (side: 0 | 1) =>
@@ -197,48 +202,26 @@ export default function FerryGame({ onFinish }: GameProps) {
       </div>
 
       <div className="river-scene">
-        <div className={`bank left ${st.boat === 0 && !sailing ? 'is-active' : ''}`}>
-          <div className="bank-label">Start</div>
-          <div className="bank-tokens">
-            {bank(0).map(({ k, i }) => (
-              <Token key={i} kind={k} onClick={() => toggle(i)} disabled={busy || st.boat !== 0} />
-            ))}
-          </div>
-        </div>
-
-        <div className="river">
-          <div className="waves" />
-          <div className={`boat side-${boatShown}`}>
-            <div className="boat-seats">
-              <span className="sailor" title="Sailor">🧑‍✈️</span>
-              {load.map((i) => (
-                <Token key={i} kind={p.kinds[i]} onClick={() => toggle(i)} disabled={busy} />
-              ))}
-              {Array.from({ length: Math.max(0, p.capacity - load.length) }, (_, s) => (
-                <span key={`e${s}`} className="seat-empty" />
-              ))}
-            </div>
-            <div className="boat-hull" />
-          </div>
-        </div>
-
-        <div className={`bank right ${st.boat === 1 && !sailing ? 'is-active' : ''}`}>
-          <div className="bank-label">Destination</div>
-          <div className="bank-tokens">
-            {bank(1).map(({ k, i }) => (
-              <Token key={i} kind={k} onClick={() => toggle(i)} disabled={busy || st.boat !== 1} />
-            ))}
-          </div>
-        </div>
+        <FerryScene
+          key={idx}
+          puzzle={p}
+          st={st}
+          load={load}
+          sailing={sailing}
+          boatSide={boatShown as 0 | 1}
+          eaten={eaten?.pair ?? null}
+          celebrate={!!banner?.ok}
+          busy={busy}
+          onPick={toggle}
+        />
 
         {toast && <div className="ferry-toast">{toast}</div>}
 
         {eaten && (
-          <div className="overlay overlay-bad">
+          <div className="overlay overlay-bad overlay-delayed">
             <div className="overlay-card">
-              <div className="overlay-emoji">😱</div>
               <h3>Oh no!</h3>
-              <p>{eaten}</p>
+              <p>{eaten.text}</p>
               <button className="btn btn-primary" onClick={retry}>
                 <RetryIcon size={16} /> Try again
               </button>
@@ -246,21 +229,23 @@ export default function FerryGame({ onFinish }: GameProps) {
           </div>
         )}
         {banner && (
-          <div className={`overlay ${banner.ok ? 'overlay-ok' : 'overlay-bad'}`}>
+          <div className={`overlay ${banner.ok ? 'overlay-ok' : 'overlay-bad'} overlay-delayed`}>
             <div className="overlay-card">
               <h3>{banner.title}</h3>
               <p>{banner.text}</p>
             </div>
           </div>
         )}
+        <div className="scene-tip">Drag to look around · scroll to zoom</div>
       </div>
 
       <div className="ferry-actions">
         <p className="muted small">
-          Click a passenger on the boat's side to board. Passengers stay on board until you click them off. The sailor can also cross alone.
+          Click a character on the boat's side to board them, and click them again to get off. Passengers stay on board until you
+          click them off. The sailor can also cross alone.
         </p>
         <button className="btn btn-primary btn-lg accent-btn" onClick={sail} disabled={busy}>
-          ⛵ Sail {boatShown === 0 ? '→' : '←'}
+          {boatShown === 0 ? 'Sail across' : 'Sail back'}
         </button>
       </div>
     </div>

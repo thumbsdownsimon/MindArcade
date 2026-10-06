@@ -740,6 +740,11 @@ kbd {
   animation: fade .2s ease-out;
 }
 
+/* Lets a 3D animation (e.g. someone being eaten) play before the card covers it. */
+.overlay-delayed {
+  animation: fade .3s ease-out .9s both;
+}
+
 .overlay-card {
   max-width: 400px;
   width: 100%;
@@ -1031,4 +1036,12 @@ kbd {
   gap: 12px;
   flex-wrap: wrap;
   margin-top: 8px;
+}
+
+.game-loading {
+  display: grid;
+  place-items: center;
+  min-height: 420px;
+  color: var(--muted);
+  font-weight: 600;
 }
