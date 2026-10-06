@@ -128,7 +128,7 @@ function Creature({ i, kind, look, place, getPos, stalk, nervous, eaten, celebra
     positions.current[i] = grp.position;
 
     // Facing: along the hop while moving, otherwise towards the camera (or the prey when stalking).
-    let yaw = 0.15 * Math.sin(t * 0.4 + a.seed);
+    let yaw = Math.PI / 4 + 0.15 * Math.sin(t * 0.4 + a.seed); // face the 45° camera
     if (moving && dist > 0.2) yaw = Math.atan2(tgt.x - a.from.x, tgt.z - a.from.z);
     else if (stalk !== null && positions.current[stalk]) {
       tmp.copy(positions.current[stalk]).sub(grp.position);
@@ -249,7 +249,17 @@ function animateRig(kind: Kind, r: Rig, t: number, s: AnimState) {
 
 /* ---------- Boat ---------- */
 
-function Boat({ cap, side, sailing, boatRef }: { cap: number; side: number; sailing: boolean; boatRef: React.MutableRefObject<THREE.Group | null> }) {
+interface BoatProps {
+  cap: number;
+  side: number;
+  sailing: boolean;
+  busy: boolean;
+  boatRef: React.MutableRefObject<THREE.Group | null>;
+  onSail: () => void;
+}
+
+function Boat({ cap, side, sailing, busy, boatRef, onSail }: BoatProps) {
+  const [hover, setHover] = useState(false);
   const sailorRig = useRef<Rig>(null);
   const tw = useRef({ side: -1, from: BOAT_Z[side], t0: 0 });
   const geo = useMemo(() => {
@@ -300,13 +310,36 @@ function Boat({ cap, side, sailing, boatRef }: { cap: number; side: number; sail
   });
 
   return (
-    <group ref={boatRef}>
+    <group
+      ref={boatRef}
+      // Clicking the raft or the sailor sets sail. Passengers handle their own clicks first.
+      onClick={(e: ThreeEvent<MouseEvent>) => {
+        e.stopPropagation();
+        if (e.delta <= 6) onSail();
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHover(true);
+        document.body.style.cursor = 'pointer';
+      }}
+      onPointerOut={() => {
+        setHover(false);
+        document.body.style.cursor = '';
+      }}
+    >
       <mesh geometry={geo} castShadow receiveShadow>
         <meshStandardMaterial vertexColors roughness={0.9} />
       </mesh>
       <group position={[-raftWidth(cap) / 2 + 0.6, 0.14, 0]} scale={0.66}>
         <VoxelModel ref={sailorRig} id="sailor" model={sailorModel} />
       </group>
+      {hover && (
+        <Label3D
+          position={[-raftWidth(cap) / 2 + 0.6, 1.9, 0]}
+          text="Sailor"
+          sub={busy ? 'wait…' : side === 0 ? 'click to sail across' : 'click to sail back'}
+        />
+      )}
       {/* oar */}
       <mesh position={[-raftWidth(cap) / 2 + 0.25, 0.25, 0.75]} rotation={[0.9, 0, 0.2]} castShadow>
         <boxGeometry args={[0.07, 0.07, 1.6]} />
@@ -335,9 +368,9 @@ function useScenery() {
     for (const side of [0, 1]) {
       const dir = side === 0 ? 1 : -1;
       const depth = side === 0 ? 14 : 22;
-      ground.push(box([60, 0.3, depth], [0, -0.15, dir * (SHORE + 0.6 + depth / 2)], '#6fbf4a'));
-      ground.push(box([60, 2, depth], [0, -1.3, dir * (SHORE + 0.6 + depth / 2)], '#8b5a2b'));
-      for (let x = -30; x < 30; x += 1) {
+      ground.push(box([140, 0.3, depth], [0, -0.15, dir * (SHORE + 0.6 + depth / 2)], '#6fbf4a'));
+      ground.push(box([140, 2, depth], [0, -1.3, dir * (SHORE + 0.6 + depth / 2)], '#8b5a2b'));
+      for (let x = -70; x < 70; x += 1) {
         const jag = (Math.sin(x * 1.7 + side * 3) + Math.sin(x * 0.6)) * 0.25 + 0.3;
         ground.push(box([1, 0.3, 0.6 + jag], [x + 0.5, -0.15, dir * (SHORE + 0.6 - (0.6 + jag) / 2 + 0.3)], x % 2 ? '#6fbf4a' : '#66b343'));
         ground.push(box([1, 1.2, 0.6 + jag], [x + 0.5, -0.9, dir * (SHORE + 0.6 - (0.6 + jag) / 2 + 0.3)], '#a0703c'));
@@ -374,13 +407,13 @@ function Water() {
     const g = ripples.current;
     if (!g) return;
     g.children.forEach((c, k) => {
-      c.position.x = (((clock.elapsedTime * (0.5 + (k % 3) * 0.2) + k * 7.3) % 40) + 40) % 40 - 20;
+      c.position.x = (((clock.elapsedTime * (0.5 + (k % 3) * 0.2) + k * 7.3) % 60) + 60) % 60 - 30;
     });
   });
   return (
     <>
       <mesh position={[0, -0.32, 0]} rotation-x={-Math.PI / 2} receiveShadow>
-        <planeGeometry args={[80, SHORE * 2 + 1.4]} />
+        <planeGeometry args={[160, SHORE * 2 + 1.4]} />
         <meshStandardMaterial color="#2b8fd6" roughness={0.25} metalness={0.1} />
       </mesh>
       <group ref={ripples}>
@@ -434,9 +467,10 @@ export interface FerrySceneProps {
   celebrate: boolean;
   busy: boolean;
   onPick: (i: number) => void;
+  onSail: () => void;
 }
 
-function Scene({ puzzle, st, load, sailing, boatSide, eaten, celebrate, busy, onPick }: FerrySceneProps) {
+function Scene({ puzzle, st, load, sailing, boatSide, eaten, celebrate, busy, onPick, onSail }: FerrySceneProps) {
   const boatRef = useRef<THREE.Group | null>(null);
   const positions = useRef<THREE.Vector3[]>([]);
   const looks = useMemo(() => puzzle.kinds.map((_, i) => lookFor(puzzle.kinds, i)), [puzzle]);
@@ -493,7 +527,7 @@ function Scene({ puzzle, st, load, sailing, boatSide, eaten, celebrate, busy, on
         <meshStandardMaterial vertexColors roughness={0.9} />
       </mesh>
       <Water />
-      <Boat cap={puzzle.capacity} side={boatSide} sailing={sailing} boatRef={boatRef} />
+      <Boat cap={puzzle.capacity} side={boatSide} sailing={sailing} busy={busy} boatRef={boatRef} onSail={onSail} />
       {puzzle.kinds.map((k, i) => (
         <Creature
           key={i}
@@ -522,8 +556,8 @@ function Scene({ puzzle, st, load, sailing, boatSide, eaten, celebrate, busy, on
         enableDamping
         minDistance={8}
         maxDistance={17}
-        minAzimuthAngle={-0.65}
-        maxAzimuthAngle={0.65}
+        minAzimuthAngle={Math.PI / 4 - 0.65}
+        maxAzimuthAngle={Math.PI / 4 + 0.65}
         minPolarAngle={0.55}
         maxPolarAngle={1.3}
       />
@@ -533,7 +567,7 @@ function Scene({ puzzle, st, load, sailing, boatSide, eaten, celebrate, busy, on
 
 export default function FerryScene(props: FerrySceneProps) {
   return (
-    <Stage3D className="ferry-canvas" camera={{ position: [0, 7.4, 13.8], fov: 42 }} onPointerMissed={() => (document.body.style.cursor = '')}>
+    <Stage3D className="ferry-canvas" camera={{ position: [9.3, 7.4, 9.9], fov: 42 }} onPointerMissed={() => (document.body.style.cursor = '')}>
       <Scene {...props} />
     </Stage3D>
   );

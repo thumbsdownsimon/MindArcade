@@ -213,6 +213,7 @@ export default function FerryGame({ onFinish }: GameProps) {
           celebrate={!!banner?.ok}
           busy={busy}
           onPick={toggle}
+          onSail={sail}
         />
 
         {toast && <div className="ferry-toast">{toast}</div>}
@@ -241,7 +242,7 @@ export default function FerryGame({ onFinish }: GameProps) {
 
       <div className="ferry-actions">
         <p className="muted small">
-          Click a character on the boat's side to board them, and click them again to get off. Passengers stay on board until you
+          Click a character on the boat's side to board them, and click them again to get off. Click the sailor or the raft (or the button) to sail. Passengers stay on board until you
           click them off. The sailor can also cross alone.
         </p>
         <button className="btn btn-primary btn-lg accent-btn" onClick={sail} disabled={busy}>
