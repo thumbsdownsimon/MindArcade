@@ -16,15 +16,23 @@
 .nc-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-  gap: 22px;
+  grid-template-areas: 'ex q' 'calc q';
+  gap: 12px 22px;
   align-items: start;
 }
 
-@media (max-width: 860px) {
-  .nc-layout { grid-template-columns: 1fr; }
-}
+.nc-ex { grid-area: ex; min-width: 0; }
+.nc-question { grid-area: q; }
+.nc-calc-toggle { grid-area: calc; }
 
-.nc-left { display: flex; flex-direction: column; gap: 12px; }
+/* Phones and narrow tablets: data, then the question, then the calculator. */
+@media (max-width: 860px) {
+  .nc-layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'ex' 'q' 'calc'; gap: 14px; }
+  .calc { max-width: none; }
+  .nc-question h3 { font-size: 17px; }
+  .nc-table { font-size: 14px; }
+  .nc-table th, .nc-table td { padding: 7px 6px; }
+}
 
 .nc-exhibit { padding: 14px; }
 

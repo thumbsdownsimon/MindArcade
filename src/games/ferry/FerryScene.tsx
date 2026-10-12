@@ -632,7 +632,7 @@ function Scene({ puzzle, st, load, sailing, boatSide, eaten: eatenInfo, celebrat
 
 export default function FerryScene(props: FerrySceneProps) {
   return (
-    <Stage3D className="ferry-canvas" camera={{ position: [9.3, 7.4, 9.9], fov: 42 }} onPointerMissed={() => (document.body.style.cursor = '')}>
+    <Stage3D className="ferry-canvas" fitAspect={1.45} camera={{ position: [9.3, 7.4, 9.9], fov: 42 }} onPointerMissed={() => (document.body.style.cursor = '')}>
       <Scene {...props} />
     </Stage3D>
   );

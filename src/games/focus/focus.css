@@ -1,7 +1,8 @@
 /* A dark screen in both themes, so the ink colours read the same for everyone. */
 .fs-screen {
   position: relative;
-  height: 360px;
+  height: 320px;
+  height: clamp(220px, 45svh, 360px);
   border-radius: 16px;
   display: grid;
   place-items: center;
@@ -25,7 +26,6 @@
 
 @media (max-width: 560px) {
   .fs-arrows, .fs-word { font-size: 44px; }
-  .fs-screen { height: 300px; }
 }
 
 .fs-fb {

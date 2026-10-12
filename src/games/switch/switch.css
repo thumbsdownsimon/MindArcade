@@ -1,6 +1,7 @@
 .ws-table {
   position: relative;
-  min-height: 470px;
+  min-height: 420px;
+  min-height: min(470px, 70svh);
   padding: 22px 12px;
   border-radius: 16px;
   display: flex;
@@ -95,4 +96,12 @@
 @media (max-width: 560px) {
   .ws-keys { gap: 8px; }
   .ws-draw { width: 110px; }
+}
+
+/* Short screens (landscape phones): smaller cards so the card to sort stays in view. */
+@media (max-height: 520px) {
+  .ws-table { gap: 12px; padding: 12px; }
+  .ws-keys { grid-template-columns: repeat(4, 76px); }
+  .ws-draw { width: 76px; }
+  .ws-feedback { min-height: 28px; padding: 4px 12px; }
 }

@@ -23,6 +23,8 @@
 
 .bird-viewport {
   position: relative;
+  height: 420px;
+  height: clamp(300px, 64svh, 470px);
   overflow: hidden;
   border-radius: 16px;
   background: #bde4f7;

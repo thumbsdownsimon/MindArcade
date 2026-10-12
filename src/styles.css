@@ -634,8 +634,11 @@ kbd {
 }
 
 @media (max-width: 600px) {
-  .play-bar { grid-template-columns: auto 1fr; }
-  .play-bar-spacer, .play-title .skill-tag { display: none; }
+  .play-bar { grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; margin-bottom: 10px; }
+  .play-title { min-width: 0; gap: 8px; }
+  .play-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .play-title .skill-tag, .play-title .game-icon { display: none; }
+  .play-bar .btn-sm { padding: 6px 8px; }
 }
 
 .stage {
@@ -1276,4 +1279,47 @@ kbd {
   letter-spacing: .08em;
   text-transform: uppercase;
   color: var(--accent);
+}
+
+/* ============ Touch & small screens ============ */
+/* No 300 ms tap delay or double-tap zoom on controls, and no grey flash on tap. */
+button,
+a,
+.btn,
+summary {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Overlays inside short game screens (e.g. a landscape phone) scroll instead of overflowing. */
+.overlay-card {
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+@media (max-width: 600px) {
+  .overlay { padding: 10px; }
+  .overlay-card { padding: 18px; }
+  .overlay-card h3 { font-size: 19px; }
+  .hud { gap: 8px; margin-bottom: 10px; }
+  .hud .progress-bar { max-width: none !important; flex-basis: 100%; }
+  .pill { padding: 4px 10px; font-size: 12px; }
+  .intro-foot { flex-direction: column; align-items: stretch; }
+  .intro-buttons { flex-direction: column-reverse; }
+  .intro-buttons .btn { width: 100%; }
+  .intro-head { gap: 14px; }
+  .game-icon.lg { width: 56px; height: 56px; }
+  .results-actions .btn { flex: 1 1 100%; }
+  .practice-done-actions .btn { flex: 1 1 100%; }
+}
+
+/* Hover-only effects stay off on touch screens, where they would "stick" after a tap. */
+@media (hover: none) {
+  .game-card:hover { transform: none; }
+}
+
+/* Short screens (landscape phones): the header scrolls away instead of covering a fifth of the screen. */
+@media (max-height: 520px) {
+  .header { position: static; }
+  .main { padding-top: 12px; }
 }

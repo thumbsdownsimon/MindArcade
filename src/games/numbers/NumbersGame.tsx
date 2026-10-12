@@ -8,6 +8,8 @@ import Calculator from './Calculator';
 import './numbers.css';
 
 const Q_MS = 90_000;
+// On phones the calculator starts folded away so the question stays on screen.
+const calcOpen = typeof window === 'undefined' || window.matchMedia('(min-width: 861px)').matches;
 const LETTERS = 'ABCDE';
 
 interface Rec {
@@ -88,13 +90,13 @@ export default function NumbersGame({ onFinish, practice }: GameProps) {
       </div>
 
       <div className="nc-layout">
-        <div className="nc-left">
+        <div className="nc-ex">
           <Exhibit data={cur.d} />
-          <details className="nc-calc-toggle" open>
-            <summary>Calculator</summary>
-            <Calculator />
-          </details>
         </div>
+        <details className="nc-calc-toggle" open={calcOpen}>
+          <summary>Calculator</summary>
+          <Calculator />
+        </details>
 
         <div className="nc-question">
           <span className="q-label">

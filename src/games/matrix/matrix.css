@@ -21,6 +21,8 @@
   gap: 6px;
   padding: 10px;
   max-width: 440px;
+  /* Keep the whole grid on screen on short (landscape) phones. */
+  max-width: min(440px, 72svh);
   border-radius: 14px;
   background: #e5e7eb;
 }
@@ -96,3 +98,11 @@
 .mx-feedback { display: flex; flex-direction: column; gap: 10px; }
 .mx-feedback .explain { margin: 0; }
 .mx-feedback .btn { align-self: flex-start; }
+
+@media (max-width: 600px) {
+  .mx-layout { gap: 14px; }
+  .mx-board { gap: 4px; padding: 6px; margin: 0 auto; }
+  .mx-options { gap: 6px; }
+  .mx-option { padding: 3px; }
+  .mx-prompt { margin-bottom: 6px; font-size: 15px; }
+}

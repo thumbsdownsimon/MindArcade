@@ -12,18 +12,14 @@
 
 .pond {
   position: relative;
-  height: 470px;
+  height: 420px;
+  height: clamp(300px, 64svh, 470px);
   border-radius: 16px;
   overflow: hidden;
   background: #bfe3fb;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .06);
 }
 
-@media (max-width: 600px) {
-  .pond {
-    height: 380px;
-  }
-}
 
 .tap3d {
   display: grid;
@@ -174,4 +170,8 @@
 
 .seq-dots span.on {
   background: var(--accent);
+}
+
+@media (max-width: 600px) {
+  .area3d { font-size: 9px; letter-spacing: .04em; }
 }

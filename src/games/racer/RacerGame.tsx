@@ -309,7 +309,7 @@ export default function RacerGame({ onFinish, practice }: GameProps) {
             </button>
           </div>
           <p className="muted small center">
-            Click a lane, use ← / →, or press 1–4. Changing lanes briefly costs some speed.
+            Tap or click a lane, use ← / →, or press 1–4. Changing lanes briefly costs some speed.
           </p>
         </div>
       </div>

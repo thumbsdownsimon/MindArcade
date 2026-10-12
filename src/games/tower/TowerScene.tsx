@@ -235,7 +235,7 @@ function Scene({ caps, pegs, goal, held, interactive, hint, solved, onPeg }: Tow
 
 export default function TowerScene(props: TowerSceneProps) {
   return (
-    <Stage3D className="tower-canvas" camera={{ position: [0.9, 6.4, 12.6], fov: 31 }} onPointerMissed={() => (document.body.style.cursor = '')}>
+    <Stage3D className="tower-canvas" fitAspect={1.7} camera={{ position: [0.9, 6.4, 12.6], fov: 31 }} onPointerMissed={() => (document.body.style.cursor = '')}>
       <Scene {...props} />
     </Stage3D>
   );

@@ -3,6 +3,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import type * as THREE from 'three';
 import VoxelModel, { type Rig } from './VoxelModel';
 import type { Model } from './voxel';
+import { LOW_POWER } from './Stage3D';
 
 function Turntable({ id, model, flap }: { id: string; model: Model; flap?: boolean }) {
   const g = useRef<THREE.Group>(null);
@@ -28,7 +29,7 @@ function Turntable({ id, model, flap }: { id: string; model: Model; flap?: boole
 /** Small spinning 3D preview of a model, e.g. "your bird". Uses its own lightweight canvas. */
 export default function ModelPreview({ id, model, height = 0.9, distance = 2.2, flap }: { id: string; model: Model; height?: number; distance?: number; flap?: boolean }) {
   return (
-    <Canvas className="preview3d" dpr={[1, 2]} camera={{ position: [0, height + 0.5, distance], fov: 30 }} onCreated={({ camera }) => camera.lookAt(0, height * 0.45, 0)}>
+    <Canvas className="preview3d" dpr={LOW_POWER ? [1, 1.5] : [1, 2]} camera={{ position: [0, height + 0.5, distance], fov: 30 }} onCreated={({ camera }) => camera.lookAt(0, height * 0.45, 0)}>
       <hemisphereLight args={['#ffffff', '#88a070', 2]} />
       <directionalLight position={[2, 4, 3]} intensity={2} />
       <Turntable id={id} model={model} flap={flap} />

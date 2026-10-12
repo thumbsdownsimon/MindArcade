@@ -18,7 +18,6 @@ interface ClickRec {
   correct: boolean;
 }
 
-const VIEW_H = 470;
 const GAME_MS = 180_000;
 const PER_SPECIES = 16;
 const PLUS = 10;
@@ -214,7 +213,7 @@ export default function BirdGame({ onFinish, practice }: GameProps) {
       </div>
 
       <div className="birds-layout">
-        <div className="bird-viewport" style={{ height: VIEW_H }}>
+        <div className="bird-viewport">
           <BirdScene world={world} birds={birds} models={MODELS} cam={cam} onPick={clickBird} enabled={started} pops={pops} />
 
           <div className="cam-buttons">

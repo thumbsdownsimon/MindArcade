@@ -189,7 +189,7 @@ function Areas({ areas, clickable, picked, onArea }: { areas: string[]; clickabl
               <meshBasicMaterial color="#ffffff" transparent opacity={on ? 0.28 : clickable ? 0.07 : 0} depthWrite={false} />
             </mesh>
             <Label3D
-              position={[(a % 2 ? 1 : -1) * 1.8, 0.1, (a < 2 ? -1 : 1) * 0.55 + (a < 2 ? 0 : 0.45)]}
+              position={[(a % 2 ? 1 : -1) * (w / 2), 0.1, (a < 2 ? -1 : 1) * 0.55 + (a < 2 ? 0 : 0.45)]}
               text={name}
               className={`area3d ${clickable ? 'is-live' : ''}`}
             />
@@ -266,7 +266,7 @@ export default function FishScene({ spots, areas, pads, spotClickable, areaClick
   const ground = useGround();
   const positions = useMemo(() => spots.map(spotPos), [spots]);
   return (
-    <Stage3D className="fish-canvas" camera={{ position: [0, 12.2, 10.8], fov: 42 }} onCreated={({ camera }) => camera.lookAt(0, -0.9, 0.3)}>
+    <Stage3D className="fish-canvas" fitAspect={1.2} camera={{ position: [0, 12.2, 10.8], fov: 42 }} onCreated={({ camera }) => camera.lookAt(0, -0.9, 0.3)}>
       <color attach="background" args={['#bfe3fb']} />
       <fog attach="fog" args={['#bfe3fb', 20, 40]} />
       <Lights size={12} sun={[5, 12, 6]} />

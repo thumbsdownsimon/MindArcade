@@ -10,16 +10,14 @@
 
 .tower-view {
   position: relative;
-  height: 470px;
+  height: 420px;
+  height: clamp(300px, 64svh, 470px);
   border-radius: 16px;
   overflow: hidden;
   background: #dbeafe;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .06);
 }
 
-@media (max-width: 640px) {
-  .tower-view { height: 380px; }
-}
 
 .tower-view .scene-tip {
   position: absolute;
@@ -84,3 +82,9 @@
 
 .hint-from { font-weight: 700; color: #a16207; }
 .hint-to { font-weight: 700; color: #15803d; }
+
+/* Portrait phones: the scene is wide, so a shorter canvas shows the boards bigger. */
+@media (max-width: 600px) {
+  .tower-view { height: 300px; height: clamp(240px, 82vw, 400px); }
+  .tower-guess .btn { padding: 12px 0; }
+}

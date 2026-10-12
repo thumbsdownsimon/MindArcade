@@ -77,3 +77,6 @@
   pointer-events: none;
   will-change: transform;
 }
+
+/* The fish pond has no camera to drag, so a vertical swipe on it scrolls the page as usual. */
+.stage3d.fish-canvas { touch-action: pan-y; }
