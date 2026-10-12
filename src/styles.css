@@ -1045,3 +1045,235 @@ kbd {
   color: var(--muted);
   font-weight: 600;
 }
+
+/* ============ Practice ============ */
+.practice-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #a16207;
+  background: color-mix(in srgb, #eab308 18%, transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+  .practice-tag { color: #fde047; }
+}
+
+.play-bar-spacer { justify-self: end; }
+
+.intro-practice {
+  margin-top: 22px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px dashed color-mix(in srgb, #eab308 45%, var(--border));
+  background: color-mix(in srgb, #eab308 6%, var(--surface));
+}
+
+.intro-practice p { margin: 6px 0 0; color: var(--muted); font-size: 15px; }
+
+.intro-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.practice-done {
+  max-width: 640px;
+  margin: 0 auto;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.practice-done h1 { margin: 4px 0 0; font-size: 28px; }
+.practice-done > p { margin: 0; }
+
+.practice-done-icon {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  color: var(--success);
+  background: var(--success-soft);
+}
+
+.practice-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.practice-metric {
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+}
+
+.practice-metric strong { font-size: 20px; }
+
+.practice-tip {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  text-align: left;
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.practice-tip svg { flex: none; color: var(--accent); margin-top: 2px; }
+
+.practice-done-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+/* Explanation box used by several games in practice mode. */
+.explain {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  background: color-mix(in srgb, #eab308 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, #eab308 30%, var(--border));
+}
+
+.explain strong { display: block; margin-bottom: 2px; }
+
+/* ============ Progress chart ============ */
+.pc-plot {
+  position: relative;
+  height: 160px;
+  margin: 14px 0 0 28px;
+}
+
+.pc-grid span {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--border);
+}
+
+.pc-grid em {
+  position: absolute;
+  left: -28px;
+  top: -8px;
+  width: 22px;
+  text-align: right;
+  font-size: 11px;
+  font-style: normal;
+  color: var(--muted);
+}
+
+.pc-bars {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+}
+
+.pc-col {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  outline: none;
+}
+
+.pc-bar {
+  position: relative;
+  width: min(100%, 28px);
+  border-radius: 4px 4px 0 0;
+  background: color-mix(in srgb, var(--accent) 55%, var(--surface));
+  transition: background .15s;
+}
+
+.pc-col.latest .pc-bar { background: var(--accent); }
+.pc-col:hover .pc-bar, .pc-col:focus-visible .pc-bar { background: color-mix(in srgb, var(--accent) 80%, var(--text)); }
+
+.pc-bar b {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding-bottom: 2px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.pc-tip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  z-index: 2;
+  display: none;
+  flex-direction: column;
+  min-width: 130px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.pc-col:first-child .pc-tip { left: 0; transform: none; }
+.pc-col:last-child .pc-tip { left: auto; right: 0; transform: none; }
+.pc-col:hover .pc-tip, .pc-col:focus-visible .pc-tip { display: flex; }
+.pc-col:hover { z-index: 3; }
+
+.pc-axis {
+  display: flex;
+  gap: 2px;
+  margin-left: 28px;
+  padding-top: 6px;
+}
+
+.pc-axis span {
+  flex: 1;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+}
+
+/* Right/wrong verdict used by the reasoning games. */
+.verdict {
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 15px;
+  animation: pop .2s ease-out;
+}
+
+.verdict.ok { background: var(--success-soft); color: var(--success); }
+.verdict.bad { background: color-mix(in srgb, #dc2626 12%, var(--surface)); color: #dc2626; }
+.explain ul { margin: 4px 0 0; padding-left: 18px; }
+.explain li + li { margin-top: 4px; }
+
+.q-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}

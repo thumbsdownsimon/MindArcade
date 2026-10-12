@@ -98,7 +98,8 @@ function Minimap({ world, cam, found }: { world: World; cam: React.MutableRefObj
   );
 }
 
-export default function BirdGame({ onFinish }: GameProps) {
+export default function BirdGame({ onFinish, practice }: GameProps) {
+  const gameMs = practice ? 60_000 : GAME_MS;
   const [world] = useState(buildWorld);
   const birds = useRef<BirdSim[]>([]);
   if (!birds.current.length) birds.current = placeBirds(world.perches, shuffle(SPECIES.flatMap((s) => Array(PER_SPECIES).fill(s.id) as number[])));
@@ -123,7 +124,7 @@ export default function BirdGame({ onFinish }: GameProps) {
     const iv = window.setInterval(() => {
       const e = performance.now() - startT.current;
       setElapsed(e);
-      if (e >= GAME_MS) finish();
+      if (e >= gameMs) finish();
     }, 200);
     return () => clearInterval(iv);
   }, [started]);
@@ -131,8 +132,8 @@ export default function BirdGame({ onFinish }: GameProps) {
   function finish() {
     if (ended.current) return;
     ended.current = true;
-    const e = Math.min(GAME_MS, performance.now() - startT.current);
-    onFinish(analyse(clicks.current, switches.current, e, birds.current));
+    const e = Math.min(gameMs, performance.now() - startT.current);
+    onFinish(practice ? practiceResult(clicks.current) : analyse(clicks.current, switches.current, e, birds.current));
   }
 
   function chooseTarget(id: number) {
@@ -161,8 +162,10 @@ export default function BirdGame({ onFinish }: GameProps) {
     const now = performance.now();
     clicks.current.push({ t: now - startT.current, correct });
     const pid = ++popId.current;
-    setPops((p) => [...p, { id: pid, x: b.pos.x, y: b.pos.y, z: b.pos.z, text: correct ? `+${PLUS}` : `−${MINUS}`, ok: correct }]);
-    window.setTimeout(() => setPops((p) => p.filter((x) => x.id !== pid)), 900);
+    // In practice a wrong click names the bird you actually clicked, so you learn the look-alikes.
+    const text = correct ? `+${PLUS}` : practice ? `${SPECIES[b.species].name} (−${MINUS})` : `−${MINUS}`;
+    setPops((p) => [...p, { id: pid, x: b.pos.x, y: b.pos.y, z: b.pos.z, text, ok: correct }]);
+    window.setTimeout(() => setPops((p) => p.filter((x) => x.id !== pid)), practice && !correct ? 1800 : 900);
     if (correct) {
       lastFind.current = now;
       b.found = true;
@@ -176,7 +179,7 @@ export default function BirdGame({ onFinish }: GameProps) {
 
   const nudge = (fn: (c: CamState) => void) => () => fn(cam.current);
   const foundOf = (s: number) => found.filter((f) => f.species === s).length;
-  const remaining = Math.max(0, GAME_MS - elapsed);
+  const remaining = Math.max(0, gameMs - elapsed);
   const correct = clicks.current.filter((c) => c.correct).length;
   const wrong = clicks.current.length - correct;
   const tgt = target === null ? null : SPECIES[target];
@@ -227,10 +230,13 @@ export default function BirdGame({ onFinish }: GameProps) {
             <div className="overlay">
               <div className="overlay-card">
                 <span className="eyebrow">Bird watching</span>
-                <h3>Find as many birds as you can</h3>
+                <h3>{practice ? 'Practice: 1 minute' : 'Find as many birds as you can'}</h3>
                 <p>
                   You'll be given a random bird to look for. Correct birds earn +{PLUS}, wrong ones cost −{MINUS}. Birds hide in tree
-                  tops, under trees, behind houses and in tall grass, so rotate and zoom to look around. You have 3 minutes.
+                  tops, under trees, behind houses and in tall grass, so rotate and zoom to look around.{' '}
+                  {practice
+                    ? 'Use this minute to try the controls. If you click the wrong bird, you are told which species it was.'
+                    : 'You have 3 minutes.'}
                 </p>
                 <button className="btn btn-primary" onClick={newBird}>
                   Start spotting
@@ -268,6 +274,22 @@ export default function BirdGame({ onFinish }: GameProps) {
 }
 
 /* ---------- Analysis ---------- */
+
+function practiceResult(clicks: ClickRec[]): GameResult {
+  const correct = clicks.filter((c) => c.correct).length;
+  return {
+    score: 0,
+    metrics: [
+      { label: 'Correct birds', value: String(correct) },
+      { label: 'Wrong clicks', value: String(clicks.length - correct) },
+      { label: 'Accuracy', value: clicks.length ? pct(correct / clicks.length) : 'n/a' },
+    ],
+    strengths: [],
+    improvements: [
+      'The real round lasts 3 minutes. Several species share a colour and differ only by the crest, so check both before you click. Sweep the map in a fixed pattern, and switch bird when a search goes cold.',
+    ],
+  };
+}
 
 function analyse(clicks: ClickRec[], switches: { t: number; dry: number }[], elapsedMs: number, birds: BirdSim[]): GameResult {
   const correct = clicks.filter((c) => c.correct).length;

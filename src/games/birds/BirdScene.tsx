@@ -114,9 +114,10 @@ function CameraRig({ cam, birds, world, models, onPick, enabled }: { cam: React.
       const c = cam.current;
       const k = worldPerPixel();
       const s = Math.sin(c.yaw), co = Math.cos(c.yaw);
-      // screen right = (cos, -sin), screen up (into the scene) = (-sin, -cos)
-      c.x -= (co * dx - s * dy / Math.sin(pitchFor(c.dist))) * k;
-      c.z -= (-s * dx - co * dy / Math.sin(pitchFor(c.dist))) * k;
+      // screen right = (cos, -sin), screen up (into the scene) = (-sin, -cos).
+      // Grab-style on both axes: the ground follows the cursor.
+      c.x -= (co * dx + s * dy / Math.sin(pitchFor(c.dist))) * k;
+      c.z -= (-s * dx + co * dy / Math.sin(pitchFor(c.dist))) * k;
     };
     const twoFinger = () => {
       const [a, b] = [...pointers.values()];

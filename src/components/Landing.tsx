@@ -18,10 +18,11 @@ export default function Landing() {
       <section className="hero">
         <div>
           <span className="eyebrow">Game-based cognitive training</span>
-          <h1>Play four short games. Learn how your mind works.</h1>
+          <h1>Train for aptitude tests. Learn how your mind works.</h1>
           <p>
-            Each game targets one cognitive skill: problem solving, flexibility, speed versus accuracy, and
-            learning. After every round you get a personal breakdown of how you did and what to work on next.
+            {GAMES.length} games, each targeting one skill that employer tests measure: inductive, numerical and deductive reasoning,
+            planning, attention, memory and more. Every game starts with an optional practice round, and after each real round you get
+            a personal breakdown and your progress over time.
           </p>
           <div className="hero-actions">
             <a className="btn btn-primary btn-lg" href={`#/play/${next.id}`}>

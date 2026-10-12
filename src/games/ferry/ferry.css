@@ -115,3 +115,17 @@
   flex: 1;
   min-width: 220px;
 }
+
+.tier-easy { color: #15803d; background: color-mix(in srgb, #22c55e 14%, transparent); }
+.tier-medium { color: #a16207; background: color-mix(in srgb, #eab308 16%, transparent); }
+.tier-hard { color: #c2410c; background: color-mix(in srgb, #f97316 15%, transparent); }
+.tier-expert { color: #b91c1c; background: color-mix(in srgb, #ef4444 14%, transparent); }
+
+@media (prefers-color-scheme: dark) {
+  .tier-easy { color: #4ade80; }
+  .tier-medium { color: #fde047; }
+  .tier-hard { color: #fdba74; }
+  .tier-expert { color: #fca5a5; }
+}
+
+.ferry-explain { margin: 0 0 12px; }

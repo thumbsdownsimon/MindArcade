@@ -6,8 +6,8 @@ import * as THREE from 'three';
 import Stage3D, { Lights } from '../../three/Stage3D';
 import VoxelModel, { type Rig } from '../../three/VoxelModel';
 import { box, mergeParts, type Model, type Part } from '../../three/voxel';
-import { chicken, fox, larva, person, type PersonLook } from '../../three/models';
-import { EATS, LABEL, type Kind, type Puzzle, type State } from './engine';
+import { bear, chicken, dog, fox, larva, person, sheep, wolf, type PersonLook } from '../../three/models';
+import { LABEL, conflict, hasSailor, isPersonKind, weight, type Kind, type Puzzle, type State } from './engine';
 
 /* ---------- Layout (world units) ---------- */
 
@@ -18,8 +18,12 @@ const SLOT_GAP = 1.5;
 const SEAT_GAP = 1.2;
 export const SAIL_MS = 1500;
 
-const raftWidth = (cap: number) => SEAT_GAP * (cap + 1) + 0.5;
-const seatX = (cap: number, seat: number) => -raftWidth(cap) / 2 + 0.6 + SEAT_GAP * (seat + 1);
+/** Positions along the raft: the sailor's spot (if any) plus one per seat. */
+const raftSlots = (p: Puzzle) => p.capacity + (hasSailor(p) ? 1 : 0);
+const raftWidth = (slots: number) => SEAT_GAP * slots + 0.5;
+const slotOnRaft = (slots: number, j: number) => -raftWidth(slots) / 2 + 0.6 + SEAT_GAP * j;
+/** x of a passenger whose seats start at `seat` (a fraction for characters that span two seats). */
+const seatX = (p: Puzzle, seat: number) => slotOnRaft(raftSlots(p), seat + (hasSailor(p) ? 1 : 0));
 const slotX = (n: number, i: number) => (i - (n - 1) / 2) * SLOT_GAP;
 
 /* ---------- Characters ---------- */
@@ -34,6 +38,18 @@ const KIDS: PersonLook[] = [
   { skin: '#c68863', shirt: '#22c55e', pants: '#475569', hair: '#1c1917', kid: true, hat: 'cap', hatColor: '#ef4444' },
   { skin: '#e0ac80', shirt: '#38bdf8', pants: '#7c2d12', hair: '#78350f', kid: true },
   { skin: '#8d5a3b', shirt: '#f472b6', pants: '#334155', hair: '#1c1917', kid: true, hat: 'bow', hatColor: '#a855f7' },
+];
+const POLICE: PersonLook = { skin: '#c68863', shirt: '#1e3a8a', pants: '#0f172a', hair: '#1c1917', hat: 'police', badge: '#facc15' };
+const THIEF: PersonLook = { skin: '#e0ac80', shirt: '#f8fafc', stripe: '#111827', pants: '#27272a', hair: '#3f3f46', hat: 'beanie', hatColor: '#111827', mask: true };
+const FATHER: PersonLook = { skin: '#f2c7a5', shirt: '#15803d', pants: '#44403c', hair: '#78350f', beard: '#78350f' };
+const MOTHER: PersonLook = { skin: '#f2c7a5', shirt: '#be185d', pants: '#312e81', hair: '#b45309', longHair: true };
+const SONS: PersonLook[] = [
+  { skin: '#f2c7a5', shirt: '#0ea5e9', pants: '#1e293b', hair: '#78350f', kid: true, hat: 'cap', hatColor: '#0369a1' },
+  { skin: '#c68863', shirt: '#84cc16', pants: '#1e293b', hair: '#1c1917', kid: true },
+];
+const DAUGHTERS: PersonLook[] = [
+  { skin: '#f2c7a5', shirt: '#f472b6', pants: '#7e22ce', hair: '#b45309', kid: true, longHair: true, hat: 'bow', hatColor: '#facc15' },
+  { skin: '#c68863', shirt: '#c084fc', pants: '#be123c', hair: '#1c1917', kid: true, longHair: true },
 ];
 const SAILOR: PersonLook = { skin: '#e0ac80', shirt: '#f8fafc', stripe: '#1d4ed8', pants: '#1e3a8a', hair: '#57534e', beard: '#d6d3d1', hat: 'captain' };
 
@@ -61,6 +77,26 @@ export function lookFor(kinds: Kind[], i: number): Look {
       return { id: 'chicken', model: chicken(), scale: 1.15, height: 0.98 };
     case 'larva':
       return { id: 'larva', model: larva(), scale: 1.75, height: 0.7 };
+    case 'dog':
+      return { id: 'dog', model: dog(), scale: 1.05, height: 1.05 };
+    case 'wolf':
+      return { id: 'wolf', model: wolf(), scale: 1.2, height: 1.2 };
+    case 'sheep':
+      return { id: 'sheep', model: sheep(), scale: 1.1, height: 1.1 };
+    case 'bear':
+      return { id: 'bear', model: bear(), scale: 1.15, height: 1.75 };
+    case 'police':
+      return { id: 'police', model: person(POLICE), scale: 0.66, height: 1.45 };
+    case 'thief':
+      return { id: 'thief', model: person(THIEF), scale: 0.66, height: 1.42 };
+    case 'father':
+      return { id: 'father', model: person(FATHER), scale: 0.66, height: 1.38 };
+    case 'mother':
+      return { id: 'mother', model: person(MOTHER), scale: 0.66, height: 1.38 };
+    case 'son':
+      return { id: `son${nth % SONS.length}`, model: person(SONS[nth % SONS.length]), scale: 0.66, height: 1.08 };
+    case 'daughter':
+      return { id: `daughter${nth % DAUGHTERS.length}`, model: person(DAUGHTERS[nth % DAUGHTERS.length]), scale: 0.66, height: 1.08 };
   }
 }
 
@@ -84,11 +120,13 @@ interface CreatureProps {
   eaten: boolean;
   celebrate: boolean;
   hint: string;
+  /** Practice mode: this character is part of the suggested next trip. */
+  hinted: boolean;
   onPick: (i: number) => void;
   positions: React.MutableRefObject<THREE.Vector3[]>;
 }
 
-function Creature({ i, kind, look, place, getPos, stalk, nervous, eaten, celebrate, hint, onPick, positions }: CreatureProps) {
+function Creature({ i, kind, look, place, getPos, stalk, nervous, eaten, celebrate, hint, hinted, onPick, positions }: CreatureProps) {
   const g = useRef<THREE.Group>(null);
   const rig = useRef<Rig>(null);
   const [hover, setHover] = useState(false);
@@ -96,7 +134,8 @@ function Creature({ i, kind, look, place, getPos, stalk, nervous, eaten, celebra
   const anim = useRef({ key: '', from: new THREE.Vector3(), t0: 0, dur: 0, poke: -10, yaw: 0, scale: 1, seed: i * 1.7 });
   const tgt = useMemo(() => new THREE.Vector3(), []);
   const tmp = useMemo(() => new THREE.Vector3(), []);
-  const isPerson = kind === 'adult' || kind === 'kid';
+  const isPerson = isPersonKind(kind);
+  const marker = useRef<THREE.Mesh>(null);
   const clock = useThree((s) => s.clock);
 
   useFrame(({ clock, camera }, dt) => {
@@ -146,6 +185,10 @@ function Creature({ i, kind, look, place, getPos, stalk, nervous, eaten, celebra
     grp.visible = a.scale > 0.02;
 
     animateRig(kind, r, t + a.seed, { moving, poke: sincePoke < 0.8 ? sincePoke : -1, celebrate, stalk: stalk !== null, isPerson });
+    if (marker.current) {
+      marker.current.position.y = (look.height + 0.5 + Math.sin(t * 4) * 0.12) / look.scale;
+      marker.current.rotation.y = t * 2;
+    }
   });
 
   function click(e: ThreeEvent<MouseEvent>) {
@@ -175,6 +218,12 @@ function Creature({ i, kind, look, place, getPos, stalk, nervous, eaten, celebra
         <boxGeometry args={[1.1 / look.scale, look.height / look.scale, 1.1 / look.scale]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
+      {hinted && !eaten && (
+        <mesh ref={marker} scale={0.22 / look.scale}>
+          <octahedronGeometry args={[1, 0]} />
+          <meshStandardMaterial color="#facc15" emissive="#f59e0b" emissiveIntensity={0.6} />
+        </mesh>
+      )}
       {hover && !eaten && (
         <Label3D position={[0, look.height / look.scale + 0.3 / look.scale, 0]} text={LABEL[kind]} sub={hint} />
       )}
@@ -211,7 +260,8 @@ function animateRig(kind: Kind, r: Rig, t: number, s: AnimState) {
     r.head.rotation.x = 0;
     return;
   }
-  if (kind === 'fox' || kind === 'blackfox') {
+  if (r.legFL) {
+    // Four-legged animals (fox, black fox, wolf, sheepdog, sheep, bear) share the same bones.
     r.legFL.rotation.x = walk * 0.8;
     r.legBR.rotation.x = walk * 0.8;
     r.legFR.rotation.x = -walk * 0.8;
@@ -250,7 +300,7 @@ function animateRig(kind: Kind, r: Rig, t: number, s: AnimState) {
 /* ---------- Boat ---------- */
 
 interface BoatProps {
-  cap: number;
+  puzzle: Puzzle;
   side: number;
   sailing: boolean;
   busy: boolean;
@@ -258,12 +308,15 @@ interface BoatProps {
   onSail: () => void;
 }
 
-function Boat({ cap, side, sailing, busy, boatRef, onSail }: BoatProps) {
+function Boat({ puzzle, side, sailing, busy, boatRef, onSail }: BoatProps) {
+  const cap = puzzle.capacity;
+  const sailor = hasSailor(puzzle);
+  const slots = raftSlots(puzzle);
   const [hover, setHover] = useState(false);
   const sailorRig = useRef<Rig>(null);
   const tw = useRef({ side: -1, from: BOAT_Z[side], t0: 0 });
   const geo = useMemo(() => {
-    const w = raftWidth(cap);
+    const w = raftWidth(slots);
     const d = 1.7;
     const parts: Part[] = [];
     // logs
@@ -272,15 +325,15 @@ function Boat({ cap, side, sailing, busy, boatRef, onSail }: BoatProps) {
     parts.push(box([w - 0.1, 0.06, d - 0.15], [0, 0.11, 0], '#c08a4a'));
     for (const z of [-d / 2 + 0.05, d / 2 - 0.05]) {
       parts.push(box([w, 0.06, 0.06], [0, 0.55, z], '#7c4a1e'));
-      for (let x = -w / 2 + 0.1; x <= w / 2 - 0.05; x += w / Math.max(3, cap + 1) - 0.001) parts.push(box([0.07, 0.45, 0.07], [x, 0.34, z], '#7c4a1e'));
+      for (let x = -w / 2 + 0.1; x <= w / 2 - 0.05; x += w / Math.max(3, slots) - 0.001) parts.push(box([0.07, 0.45, 0.07], [x, 0.34, z], '#7c4a1e'));
     }
     // empty seat markers
-    for (let k = 0; k < cap; k++) parts.push(box([0.6, 0.02, 0.6], [seatX(cap, k), 0.15, 0], '#e7c58f'));
+    for (let k = 0; k < cap; k++) parts.push(box([0.6, 0.02, 0.6], [seatX(puzzle, k), 0.15, 0], '#e7c58f'));
     // a little flag
     parts.push(box([0.06, 1.3, 0.06], [w / 2 - 0.15, 0.75, -d / 2 + 0.12], '#57534e'));
     parts.push(box([0.02, 0.32, 0.45], [w / 2 - 0.15, 1.24, -d / 2 + 0.37], '#ef4444'));
     return mergeParts(parts)!;
-  }, [cap]);
+  }, [puzzle]);
 
   useFrame(({ clock }) => {
     const b = boatRef.current;
@@ -330,18 +383,20 @@ function Boat({ cap, side, sailing, busy, boatRef, onSail }: BoatProps) {
       <mesh geometry={geo} castShadow receiveShadow>
         <meshStandardMaterial vertexColors roughness={0.9} />
       </mesh>
-      <group position={[-raftWidth(cap) / 2 + 0.6, 0.14, 0]} scale={0.66}>
-        <VoxelModel ref={sailorRig} id="sailor" model={sailorModel} />
-      </group>
+      {sailor && (
+        <group position={[slotOnRaft(slots, 0), 0.14, 0]} scale={0.66}>
+          <VoxelModel ref={sailorRig} id="sailor" model={sailorModel} />
+        </group>
+      )}
       {hover && (
         <Label3D
-          position={[-raftWidth(cap) / 2 + 0.6, 1.9, 0]}
-          text="Sailor"
+          position={[slotOnRaft(slots, 0), 1.9, 0]}
+          text={sailor ? 'Sailor' : 'Raft'}
           sub={busy ? 'wait…' : side === 0 ? 'click to sail across' : 'click to sail back'}
         />
       )}
       {/* oar */}
-      <mesh position={[-raftWidth(cap) / 2 + 0.25, 0.25, 0.75]} rotation={[0.9, 0, 0.2]} castShadow>
+      <mesh position={[-raftWidth(slots) / 2 + 0.25, 0.25, 0.75]} rotation={[0.9, 0, 0.2]} castShadow>
         <boxGeometry args={[0.07, 0.07, 1.6]} />
         <meshStandardMaterial color="#7c4a1e" />
       </mesh>
@@ -455,6 +510,8 @@ function Poof({ at, color }: { at: THREE.Vector3; color: string }) {
   );
 }
 
+const POOF: Partial<Record<Kind, string>> = { larva: '#84cc16', chicken: '#f8fafc', sheep: '#f5f5f0' };
+
 /* ---------- Scene ---------- */
 
 export interface FerrySceneProps {
@@ -463,14 +520,18 @@ export interface FerrySceneProps {
   load: number[];
   sailing: boolean;
   boatSide: 0 | 1;
-  eaten: [number, number] | null;
+  /** [attacker, victim] and whether the victim disappears. */
+  eaten: { pair: [number, number]; vanish: boolean } | null;
   celebrate: boolean;
   busy: boolean;
+  /** Practice hint: characters that should be on the next trip. */
+  hinted: number[];
   onPick: (i: number) => void;
   onSail: () => void;
 }
 
-function Scene({ puzzle, st, load, sailing, boatSide, eaten, celebrate, busy, onPick, onSail }: FerrySceneProps) {
+function Scene({ puzzle, st, load, sailing, boatSide, eaten: eatenInfo, celebrate, busy, hinted, onPick, onSail }: FerrySceneProps) {
+  const eaten = eatenInfo?.pair ?? null;
   const boatRef = useRef<THREE.Group | null>(null);
   const positions = useRef<THREE.Vector3[]>([]);
   const looks = useMemo(() => puzzle.kinds.map((_, i) => lookFor(puzzle.kinds, i)), [puzzle]);
@@ -481,7 +542,7 @@ function Scene({ puzzle, st, load, sailing, boatSide, eaten, celebrate, busy, on
     if (place.at === 'bank') return out.set(slotX(n, place.slot), 0, BANK_Z[place.side]);
     if (place.at === 'boat') {
       const b = boatRef.current;
-      out.set(seatX(puzzle.capacity, place.seat), 0.14, 0);
+      out.set(seatX(puzzle, place.seat), 0.14, 0);
       if (b) out.applyMatrix4(b.matrixWorld);
       return out;
     }
@@ -491,22 +552,25 @@ function Scene({ puzzle, st, load, sailing, boatSide, eaten, celebrate, busy, on
 
   const places: Place[] = puzzle.kinds.map((_, i) => {
     if (eaten && eaten[0] === i) return { at: 'eat', prey: eaten[1] };
-    const seat = load.indexOf(i);
-    if (seat >= 0) return { at: 'boat', seat };
+    const pos = load.indexOf(i);
+    if (pos >= 0) {
+      // Seats fill left to right; a heavy passenger sits centred over the seats it takes.
+      const start = load.slice(0, pos).reduce((s, j) => s + weight(puzzle.kinds[j]), 0);
+      return { at: 'boat', seat: start + (weight(puzzle.kinds[i]) - 1) / 2 };
+    }
     // Bank slots are keyed by entity index, so characters keep their spot across trips.
     return { at: 'bank', side: st.side[i], slot: i };
   });
 
-  // Predators stare at prey on a bank the sailor isn't guarding.
-  const guarded = sailing ? -1 : boatSide;
+  // Troublemakers stare at their victim on a bank the sailor isn't guarding.
+  const guarded = sailing || !hasSailor(puzzle) ? -1 : boatSide;
   const onBank = (i: number) => load.indexOf(i) < 0;
-  const stalkOf = (i: number): number | null => {
-    if (!onBank(i) || st.side[i] === guarded) return null;
-    const prey = EATS[puzzle.kinds[i]];
-    const victim = puzzle.kinds.findIndex((k, j) => j !== i && prey?.includes(k) && onBank(j) && st.side[j] === st.side[i]);
-    return victim >= 0 ? victim : null;
-  };
-  const stalks = puzzle.kinds.map((_, i) => stalkOf(i));
+  const stalks: (number | null)[] = puzzle.kinds.map(() => null);
+  for (const side of [0, 1] as const) {
+    if (side === guarded) continue;
+    const c = conflict(puzzle.kinds, puzzle.kinds.map((_, i) => i).filter((i) => onBank(i) && st.side[i] === side));
+    if (c) stalks[c.by] = c.victim;
+  }
 
   const hint = (i: number) => {
     if (busy) return 'wait…';
@@ -527,7 +591,7 @@ function Scene({ puzzle, st, load, sailing, boatSide, eaten, celebrate, busy, on
         <meshStandardMaterial vertexColors roughness={0.9} />
       </mesh>
       <Water />
-      <Boat cap={puzzle.capacity} side={boatSide} sailing={sailing} busy={busy} boatRef={boatRef} onSail={onSail} />
+      <Boat puzzle={puzzle} side={boatSide} sailing={sailing} busy={busy} boatRef={boatRef} onSail={onSail} />
       {puzzle.kinds.map((k, i) => (
         <Creature
           key={i}
@@ -538,15 +602,16 @@ function Scene({ puzzle, st, load, sailing, boatSide, eaten, celebrate, busy, on
           getPos={getPos}
           stalk={stalks[i]}
           nervous={stalks.some((v) => v === i)}
-          eaten={!!eaten && eaten[1] === i}
+          eaten={!!eaten && eatenInfo!.vanish && eaten[1] === i}
           celebrate={celebrate}
           hint={hint(i)}
+          hinted={hinted.includes(i)}
           onPick={onPick}
           positions={positions}
         />
       ))}
-      {eaten && positions.current[eaten[1]] && (
-        <Poof key={`${eaten[0]}-${eaten[1]}`} at={positions.current[eaten[1]]} color={puzzle.kinds[eaten[1]] === 'larva' ? '#84cc16' : puzzle.kinds[eaten[1]] === 'chicken' ? '#f8fafc' : '#e8772e'} />
+      {eaten && eatenInfo!.vanish && positions.current[eaten[1]] && (
+        <Poof key={`${eaten[0]}-${eaten[1]}`} at={positions.current[eaten[1]]} color={POOF[puzzle.kinds[eaten[1]]] ?? '#e8772e'} />
       )}
       <Label3D position={[-6, 3.3, -6.8]} text="Destination" className="label3d big" />
       <OrbitControls

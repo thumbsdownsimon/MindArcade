@@ -2,20 +2,27 @@
 
 **Play it here: https://thumbsdownsimon.github.io/MindArcade/**
 
-MindArcade is a set of four short browser games inspired by game-based cognitive assessments. Each game focuses on one
-mental skill. When you finish a round, a results page shows your score, your play style and what you could work on.
+MindArcade is a set of nine short browser games for practising the kind of aptitude and logic tests employers use
+(SHL, Aon, Talent Q, Capp, Arctic Shores and similar). Each game focuses on one mental skill. Every game starts with an
+optional practice round with hints and explanations. When you finish a real round, a results page shows your score,
+your play style, what you could work on and your progress over your previous attempts.
 
-Three of the games are 3D, with blocky Minecraft-style characters (box heads, box torsos, box limbs). You can rotate the
-view, hover over characters to see who they are, and click them to make them react. The Racer game is still 2D.
+Four of the games are 3D, with blocky Minecraft-style characters and props. The reasoning and attention tests are 2D,
+because they need crisp shapes, readable data and fast, precise reactions.
 
 ## The games
 
 | Game | Skill | What you do |
 |---|---|---|
-| **Ferry Game** (3D) | Problem solving | You stand on the start shore and look across a river. Get everyone across on a small raft without anyone being eaten: fox eats chicken, chicken eats larva, and the black fox eats everything except other black foxes. In the family puzzles, a kid can never travel as the only passenger. |
+| **Ferry Game** (3D) | Problem solving | Get everyone across a river on a small raft without anyone being eaten. Each run draws 8 puzzles from warm-up to expert: foxes, chickens and larvae, wolves that eat sheep when they outnumber them, a sheepdog that guards its bank, a bear that takes two seats, and the classic police-and-thief IQ puzzle where there is no sailor and only adults can row. |
 | **Racer Game** (2D) | Cognitive flexibility | Four lanes with hidden speeds. Find the fastest lane, then find it again each time it moves, which happens every 10 seconds. |
 | **Bird Spotting Game** (3D) | Speed vs. accuracy | Search a 3D world for one species of bird. The map has oak forest, pine woods, a meadow, a lake, a village and hills. Birds sit in tree tops, under trees, on roofs and in tall grass, and some fly to new spots. A correct click scores +10 and a wrong one costs −5. |
 | **Fish Discovery Game** (3D) | Learning & memory | Groups of fish leap out of a pond one at a time. Afterwards you answer a surprise question about where they appeared, in what order, how many there were, or which area had the most. |
+| **Pattern Matrix** (2D) | Inductive reasoning | Raven-style 3×3 matrices generated from rules (constant, one-of-each, step-by-step, arithmetic) on shape, count, colour, fill and arrow direction. 12 puzzles, 90 s each. |
+| **Number Crunch** (2D) | Numerical reasoning | A revenue table, a bar chart and a staff survey with percentage, share, projection, currency, ratio and weighted-average questions. Wrong options come from typical mistakes. Built-in calculator. |
+| **Tower Planner** (3D) | Planning | Tower of London: rebuild the goal layout with the fewest moves, after predicting how many moves you need. 3- and 4-block puzzles. |
+| **Rule Switch** (2D) | Deductive flexibility | Wisconsin-style card sorting: find the hidden rule (colour, shape or number) from feedback, and notice when it changes. |
+| **Focus Stream** (2D) | Attention & control | Flanker arrows, Stroop colour words and a 2-back letter stream, scored on accuracy, reaction time and d′. |
 
 ## How it works
 
@@ -23,7 +30,9 @@ view, hover over characters to see who they are, and click them to make them rea
 - **There is no backend.** Your results are saved in your browser's `localStorage`, so they stay on your device and are never uploaded.
 - **The 3D uses three.js** through [React Three Fiber](https://r3f.docs.pmnd.rs/). Every character and prop is built from coloured boxes (`src/three/models.ts`). The boxes for each body part are merged into one mesh, so a character takes only a few draw calls and its head, arms, legs, wings and tail can still be animated. The same models are rendered once to small PNGs for the icons in the HUD and question panels.
 - **Games load on demand.** Each game is lazy-loaded, so the landing page stays small, and the 3D engine only downloads when you open a 3D game.
-- **The puzzles are solved in advance.** The Ferry Game runs a breadth-first search (`src/games/ferry/engine.ts`) to find the minimum number of trips for each puzzle. Your "trip efficiency" is measured against that minimum.
+- **The puzzles are solved in advance.** The Ferry Game runs a breadth-first search (`src/games/ferry/engine.ts`) to find the minimum number of trips for each puzzle. Your "trip efficiency" is measured against that minimum. The same solver powers the practice hints. Tower Planner does the same for its moves (`src/games/tower/engine.ts`).
+- **Most content is generated.** Pattern matrices (`src/games/matrix/generate.ts`), numerical data sets and questions (`src/games/numbers/data.ts`) and tower layouts are generated fresh each game. Matrix answer options are built as a 2×2×2 set, so the answer can't be found by spotting the odd one out.
+- **Practice rounds are never saved.** Each game gets a `practice` prop and runs a shorter, gentler version with explanations.
 - **The bird map is new every game.** The map is generated each time (`src/games/birds/world.ts`): the zones are shuffled, then scenery, bird perches and "occluder" boxes are placed. Occluders stop you from clicking a bird through a tree or a roof.
 - **Scoring is game-specific.** Each game records raw events (trips, clicks, reaction times, answers) and turns them into a 0–100 score, a profile (e.g. *Strategic Planner*, *Sharp Spotter*), strengths and improvement tips. The `analyse` function at the bottom of each game file does this.
 
@@ -65,6 +74,11 @@ src/
   games/racer/            2D lane-switching game
   games/birds/            map generator, 3D scene with camera controls, game logic and scoring
   games/fish/             3D pond scene, fish looks, game logic and scoring
+  games/matrix/           pattern-matrix generator, SVG figures, game and scoring
+  games/numbers/          data sets and questions, table/chart exhibit, calculator
+  games/tower/            Tower of London solver and generator, 3D board
+  games/switch/           card-sorting game
+  games/focus/            flanker, Stroop and 2-back tasks
   lib/                    shared types, helpers, localStorage history
 ```
 

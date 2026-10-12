@@ -1,4 +1,6 @@
 import type { GameMeta, GameResult, ResultChart } from '../lib/types';
+import { gameHistory } from '../lib/storage';
+import { mean } from '../lib/util';
 import { CheckIcon, GridIcon, RetryIcon, TargetIcon, TrophyIcon } from './Icons';
 
 function verdict(score: number) {
@@ -59,15 +61,72 @@ function BarChart({ chart }: { chart: ResultChart }) {
   );
 }
 
+/** Score per attempt for this game, oldest to newest. Read from this browser's history only. */
+function ProgressChart({ game }: { game: GameMeta }) {
+  const all = gameHistory(game.id);
+  const shown = all.slice(-12);
+  if (shown.length < 2) return null;
+  const first = all.length - shown.length;
+  const best = Math.max(...shown.map((h) => h.score));
+  const half = Math.floor(shown.length / 2);
+  const trend = Math.round(mean(shown.slice(half).map((h) => h.score)) - mean(shown.slice(0, half).map((h) => h.score)));
+  const fmt = (d: string) => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  return (
+    <section className="card chart progress-chart">
+      <h3>Your progress on this game</h3>
+      <p className="muted small">
+        Score for your last {shown.length} attempts.{' '}
+        {trend > 0 ? `Your recent half averages ${trend} points higher than the earlier half.` : trend < 0 ? `Your recent half averages ${-trend} points lower than the earlier half.` : 'Your scores are holding steady.'}{' '}
+        Saved in this browser only.
+      </p>
+      <div className="pc-plot" role="img" aria-label={`Scores: ${shown.map((h) => h.score).join(', ')}`}>
+        <div className="pc-grid">
+          {[100, 50, 0].map((v) => (
+            <span key={v} style={{ bottom: `${v}%` }}>
+              <em>{v}</em>
+            </span>
+          ))}
+        </div>
+        <div className="pc-bars">
+          {shown.map((h, i) => {
+            const latest = i === shown.length - 1;
+            const label = latest || h.score === best;
+            return (
+              <div key={i} className={`pc-col ${latest ? 'latest' : ''}`} tabIndex={0}>
+                <span className="pc-bar" style={{ height: `${Math.max(1.5, h.score)}%` }}>
+                  {label && <b>{h.score}</b>}
+                </span>
+                <span className="pc-tip">
+                  <strong>Attempt {first + i + 1}</strong>
+                  <span>
+                    {h.score} / 100 · {fmt(h.date)}
+                  </span>
+                  {h.profile && <span>{h.profile}</span>}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="pc-axis">
+        {shown.map((_, i) => (
+          <span key={i}>#{first + i + 1}</span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 interface Props {
   game: GameMeta;
   result: GameResult;
   prevBest: number | null;
   prevPlays: number;
   onReplay: () => void;
+  onPractice: () => void;
 }
 
-export default function ResultsView({ game, result, prevBest, prevPlays, onReplay }: Props) {
+export default function ResultsView({ game, result, prevBest, prevPlays, onReplay, onPractice }: Props) {
   const v = verdict(result.score);
   const comparison =
     prevBest === null
@@ -141,9 +200,14 @@ export default function ResultsView({ game, result, prevBest, prevPlays, onRepla
 
       {result.chart && <BarChart chart={result.chart} />}
 
+      <ProgressChart game={game} />
+
       <div className="results-actions">
         <button className="btn btn-primary btn-lg accent-btn" onClick={onReplay}>
           <RetryIcon /> Play again
+        </button>
+        <button className="btn btn-secondary btn-lg" onClick={onPractice}>
+          Practice round
         </button>
         <a className="btn btn-secondary btn-lg" href="#/">
           <GridIcon /> Choose another game

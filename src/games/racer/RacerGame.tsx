@@ -85,13 +85,18 @@ function Speedometer({ speed }: { speed: number }) {
   );
 }
 
-export default function RacerGame({ onFinish }: GameProps) {
+export default function RacerGame({ onFinish, practice }: GameProps) {
+  // Practice is a 30-second race where lanes you have tried show their speed.
+  const phases = practice ? 3 : PHASES;
+  const total = PHASE_MS * phases;
   const [speeds] = useState(buildSpeeds);
+  const seen = useRef<(number | null)[]>([null, null, null, null]);
+  const [notice, setNotice] = useState<string | null>(null);
   const [started, setStarted] = useState(false);
   const [count, setCount] = useState<number | null>(null);
   const later = useTimeouts();
   const [lane, setLane] = useState(() => pick([1, 2]));
-  const [view, setView] = useState({ speed: 0, distance: 0, elapsed: 0 });
+  const [view, setView] = useState({ speed: 0, distance: 0, elapsed: 0, seen: [null, null, null, null] as (number | null)[] });
   const laneRef = useRef(lane);
   const changeAt = useRef(-Infinity);
   const sim = useRef({ speed: 0, distance: 0, elapsed: 0, road: 0 });
@@ -108,7 +113,7 @@ export default function RacerGame({ onFinish }: GameProps) {
   const roadRef = useRef<HTMLDivElement>(null);
   const finished = useRef(false);
 
-  const phaseOf = (t: number) => Math.min(PHASES - 1, Math.floor(t / PHASE_MS));
+  const phaseOf = (t: number) => Math.min(phases - 1, Math.floor(t / PHASE_MS));
 
   function changeLane(to: number) {
     if (!started || finished.current) return;
@@ -157,8 +162,13 @@ export default function RacerGame({ onFinish }: GameProps) {
       s.elapsed += dt;
       const ph = phaseOf(s.elapsed);
       if (ph !== lastPhase) {
+        if (practice && lastPhase >= 0) {
+          setNotice(`Stretch ${ph + 1} of ${phases}: the fastest lane just moved. Your old lane is slower now, so go and find the new one.`);
+          later(() => setNotice(null), 4500);
+        }
         lastPhase = ph;
         visited.current = new Set([laneRef.current]);
+        seen.current = [null, null, null, null];
       }
       const laneSpeeds = speeds[ph];
       const best = laneSpeeds.indexOf(TOP_SPEED);
@@ -170,6 +180,7 @@ export default function RacerGame({ onFinish }: GameProps) {
       stats.current.optimal += (TOP_SPEED / 3600) * dt;
 
       visited.current.add(laneRef.current);
+      if (!changing) seen.current[laneRef.current] = laneSpeeds[laneRef.current];
       if (laneRef.current === best && !changing) {
         stats.current.inBestMs[ph] += dt;
         if (stats.current.findMs[ph] === null) {
@@ -183,26 +194,26 @@ export default function RacerGame({ onFinish }: GameProps) {
     const iv = window.setInterval(() => {
       const now = performance.now();
       const s = sim.current;
-      let gap = Math.min(TOTAL_MS, now - startAt) - s.elapsed;
+      let gap = Math.min(total, now - startAt) - s.elapsed;
       while (gap > 0) {
         const dt = Math.min(gap, 40);
         step(dt, now);
         gap -= dt;
       }
       if (roadRef.current) roadRef.current.style.setProperty('--road', `${s.road}px`);
-      setView({ speed: s.speed, distance: s.distance, elapsed: s.elapsed });
+      setView({ speed: s.speed, distance: s.distance, elapsed: s.elapsed, seen: [...seen.current] });
 
-      if (s.elapsed >= TOTAL_MS && !finished.current) {
+      if (s.elapsed >= total && !finished.current) {
         finished.current = true;
         clearInterval(iv);
         stats.current.distance = s.distance;
-        onFinish(analyse(stats.current));
+        onFinish(practice ? practiceResult(stats.current, phases) : analyse(stats.current));
       }
     }, 30);
     return () => clearInterval(iv);
   }, [started]);
 
-  const remaining = Math.max(0, TOTAL_MS - view.elapsed);
+  const remaining = Math.max(0, total - view.elapsed);
 
   return (
     <div className="stage racer-stage">
@@ -216,7 +227,7 @@ export default function RacerGame({ onFinish }: GameProps) {
           </span>
         </div>
         <div className="progress-bar" style={{ maxWidth: 260 }}>
-          <span style={{ width: `${(view.elapsed / TOTAL_MS) * 100}%` }} />
+          <span style={{ width: `${(view.elapsed / total) * 100}%` }} />
         </div>
       </div>
 
@@ -233,6 +244,9 @@ export default function RacerGame({ onFinish }: GameProps) {
                 aria-label={`Lane ${l + 1}`}
               >
                 <span className="lane-num">{l + 1}</span>
+                {practice && started && (
+                  <span className={`lane-seen ${view.seen[l] === TOP_SPEED ? 'top' : ''}`}>{view.seen[l] === null ? '?' : `${view.seen[l]} km/h`}</span>
+                )}
               </button>
             ))}
             {Array.from({ length: LANES - 1 }, (_, i) => (
@@ -252,6 +266,8 @@ export default function RacerGame({ onFinish }: GameProps) {
             </div>
           </div>
 
+          {notice && <div className="racer-notice">{notice}</div>}
+
           {count !== null && (
             <div className="countdown" key={count}>
               {count > 0 ? count : 'GO!'}
@@ -262,10 +278,11 @@ export default function RacerGame({ onFinish }: GameProps) {
             <div className="overlay">
               <div className="overlay-card">
                 <span className="eyebrow">Ready?</span>
-                <h3>Find the fastest lane</h3>
+                <h3>{practice ? 'Practice: 30 seconds' : 'Find the fastest lane'}</h3>
                 <p>
-                  Each lane has a hidden speed limit, and you only see your own speedometer. The fastest lane moves every so
-                  often, so keep an eye on your speed and change lanes when it drops.
+                  {practice
+                    ? 'In practice, every lane you drive in shows its speed, so you can see how searching works. The fastest lane goes 200 km/h and moves every 10 seconds. In the real race the speeds stay hidden.'
+                    : 'Each lane has a hidden speed limit, and you only see your own speedometer. The fastest lane moves every so often, so keep an eye on your speed and change lanes when it drops.'}
                 </p>
                 <button className="btn btn-primary" onClick={() => setCount(3)}>
                   Start engine
@@ -301,6 +318,22 @@ export default function RacerGame({ onFinish }: GameProps) {
 }
 
 /* ---------- Analysis ---------- */
+
+function practiceResult(s: Stats, phases: number): GameResult {
+  const found = s.findMs.slice(0, phases).filter((m) => m !== null) as number[];
+  return {
+    score: 0,
+    metrics: [
+      { label: 'Distance efficiency', value: pct(s.distance / s.optimal) },
+      { label: 'Stretches where you found it', value: `${found.length} / ${phases}` },
+      { label: 'Avg time to find it', value: found.length ? secs(mean(found)) : 'n/a' },
+    ],
+    strengths: [],
+    improvements: [
+      'In the real race the lane speeds are hidden and there are 10 stretches. Watch the speedometer: when it drops, sweep the lanes you have not tried yet, and once you hit 200 km/h, stay put.',
+    ],
+  };
+}
 
 function analyse(s: Stats): GameResult {
   const ratio = s.distance / s.optimal;

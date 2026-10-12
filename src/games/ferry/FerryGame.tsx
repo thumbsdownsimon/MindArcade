@@ -1,26 +1,31 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import type { GameProps, GameResult } from '../../lib/types';
 import { mean, sum, pct, secs } from '../../lib/util';
 import { useTimeouts } from '../../lib/hooks';
 import { RetryIcon } from '../../components/Icons';
-import { EATS, LABEL, boatProblem, conflict, cross, leftBehind, minCrossings, type Kind, type Puzzle, type State } from './engine';
+import {
+  EATS,
+  LABEL,
+  ROWERS,
+  boatProblem,
+  cross,
+  hasSailor,
+  minCrossings,
+  seatsUsed,
+  solve,
+  tripConflict,
+  type Conflict,
+  type Kind,
+  type Puzzle,
+  type State,
+} from './engine';
+import { PRACTICE, TIER_LABEL, pickRun } from './puzzles';
 import { flatParts, snapshot } from '../../three/voxel';
 import FerryScene, { SAIL_MS, lookFor } from './FerryScene';
 import './ferry.css';
 
-const PUZZLES: Puzzle[] = [
-  { title: 'The classic crossing', kinds: ['fox', 'chicken', 'larva'], capacity: 1 },
-  { title: 'Family trip', kinds: ['adult', 'adult', 'kid', 'kid', 'kid', 'kid'], capacity: 2 },
-  { title: 'Double larva', kinds: ['fox', 'chicken', 'larva', 'larva'], capacity: 2 },
-  { title: 'Enter the black fox', kinds: ['blackfox', 'fox', 'chicken', 'larva'], capacity: 2 },
-  { title: 'Crowded farm', kinds: ['fox', 'fox', 'chicken', 'chicken', 'larva'], capacity: 2 },
-  { title: 'One parent, four kids', kinds: ['adult', 'kid', 'kid', 'kid', 'kid'], capacity: 2 },
-  { title: 'Black fox & friends', kinds: ['blackfox', 'fox', 'chicken', 'larva', 'larva'], capacity: 3 },
-  { title: 'School outing', kinds: ['adult', 'adult', 'adult', 'kid', 'kid', 'kid'], capacity: 2 },
-];
-
-
 interface Rec {
+  title: string;
   min: number;
   crossings: number;
   failures: number;
@@ -38,41 +43,92 @@ function Portrait({ kind }: { kind: Kind }) {
   return src ? <img className="portrait" src={src} alt="" /> : null;
 }
 
+const lc = (k: Kind) => LABEL[k].toLowerCase();
+
 function Rules({ p }: { p: Puzzle }) {
   const present = new Set(p.kinds);
-  const pairs = (Object.keys(EATS) as Kind[])
-    .filter((k) => present.has(k))
-    .flatMap((k) => EATS[k]!.filter((v) => present.has(v)).map((v) => [k, v] as const));
+  const sailor = hasSailor(p);
+  const chips: { key: string; warn?: boolean; body: ReactNode }[] = [];
+
+  if (sailor) chips.push({ key: 'seats', body: `Sailor + ${p.capacity} seat${p.capacity > 1 ? 's' : ''}` });
+  else {
+    const rowers = [...new Set(p.kinds.filter((k) => ROWERS.includes(k)))];
+    chips.push({ key: 'seats', body: `No sailor · raft holds ${p.capacity}` });
+    chips.push({
+      key: 'rowers',
+      warn: true,
+      body: (
+        <>
+          Only {rowers.map((k) => <Portrait key={k} kind={k} />)} {rowers.map(lc).join(', ')} can row
+        </>
+      ),
+    });
+    chips.push({ key: 'everywhere', warn: true, body: 'Rules apply on both banks and on the raft' });
+  }
+  if (present.has('bear')) chips.push({ key: 'bear', warn: true, body: <><Portrait kind="bear" /> The bear takes 2 seats</> });
+  if (sailor && present.has('kid'))
+    chips.push({ key: 'kid', warn: true, body: <><Portrait kind="kid" /> A kid can never travel as the only passenger</> });
+  for (const a of Object.keys(EATS) as Kind[]) {
+    if (!present.has(a)) continue;
+    for (const b of EATS[a]!)
+      if (present.has(b))
+        chips.push({ key: a + b, warn: true, body: <><Portrait kind={a} /> {LABEL[a]} eats <Portrait kind={b} /> {lc(b)}</> });
+  }
+  if (present.has('wolf') && present.has('sheep'))
+    chips.push({
+      key: 'wolves',
+      warn: true,
+      body: <><Portrait kind="wolf" /> Wolves eat a <Portrait kind="sheep" /> sheep when they outnumber the sheep</>,
+    });
+  if (present.has('dog'))
+    chips.push({
+      key: 'dog',
+      body: <><Portrait kind="dog" /> Nobody gets eaten where the sheepdog is{present.has('bear') ? ', except by the bear' : ''}</>,
+    });
+  if (present.has('thief'))
+    chips.push({ key: 'thief', warn: true, body: <><Portrait kind="thief" /> The thief robs the family unless the <Portrait kind="police" /> police officer is there</> });
+  if (present.has('father') && present.has('daughter'))
+    chips.push({ key: 'fd', warn: true, body: <><Portrait kind="father" /> Father can't be with a <Portrait kind="daughter" /> daughter unless the mother is there</> });
+  if (present.has('mother') && present.has('son'))
+    chips.push({ key: 'ms', warn: true, body: <><Portrait kind="mother" /> Mother can't be with a <Portrait kind="son" /> son unless the father is there</> });
+
   return (
     <div className="rules">
-      <span className="rule-chip">Sailor + {p.capacity} seat{p.capacity > 1 ? 's' : ''}</span>
-      {present.has('kid') && (
-        <span className="rule-chip warn">
-          <Portrait kind="kid" /> A kid can never travel as the only passenger
-        </span>
-      )}
-      {pairs.map(([a, b]) => (
-        <span key={a + b} className="rule-chip warn">
-          <Portrait kind={a} /> {LABEL[a]} eats <Portrait kind={b} /> {LABEL[b].toLowerCase()}
+      {chips.map((c) => (
+        <span key={c.key} className={`rule-chip ${c.warn ? 'warn' : ''}`}>
+          {c.body}
         </span>
       ))}
     </div>
   );
 }
 
-export default function FerryGame({ onFinish }: GameProps) {
-  const [mins] = useState(() => PUZZLES.map((p) => minCrossings(p) ?? 99));
+/** Describes a hinted trip in words, e.g. "Take the chicken across." */
+function describeTrip(p: Puzzle, load: number[], boat: 0 | 1) {
+  const dir = boat === 0 ? 'across' : 'back';
+  if (!load.length) return `Sail ${dir} with nobody on board.`;
+  const names = load.map((i) => `the ${lc(p.kinds[i])}`);
+  const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
+  return `Take ${list} ${dir}.`;
+}
+
+export default function FerryGame({ onFinish, practice }: GameProps) {
+  const [puzzles] = useState(() => (practice ? PRACTICE : pickRun()));
+  const [mins] = useState(() => puzzles.map((p) => minCrossings(p) ?? 99));
   const [idx, setIdx] = useState(0);
-  const p = PUZZLES[idx];
+  const p = puzzles[idx];
+  const sailor = hasSailor(p);
   const fresh = (pz: Puzzle): State => ({ side: pz.kinds.map(() => 0), boat: 0 });
-  const [st, setSt] = useState<State>(() => fresh(PUZZLES[0]));
+  const [st, setSt] = useState<State>(() => fresh(puzzles[0]));
   const [load, setLoad] = useState<number[]>([]);
   const [sailing, setSailing] = useState(false);
   const [crossings, setCrossings] = useState(0);
   const [failures, setFailures] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
-  const [eaten, setEaten] = useState<{ pair: [number, number]; text: string } | null>(null);
+  const [eaten, setEaten] = useState<Conflict | null>(null);
   const [banner, setBanner] = useState<{ ok: boolean; title: string; text: string } | null>(null);
+  const [hint, setHint] = useState<{ load: number[]; text: string } | null>(null);
+  const hintsUsed = useRef(0);
   const t0 = useRef(performance.now());
   const firstSail = useRef<number | null>(null);
   const recs = useRef<Rec[]>([]);
@@ -83,15 +139,24 @@ export default function FerryGame({ onFinish }: GameProps) {
 
   function say(msg: string) {
     setToast(msg);
-    later(() => setToast((t) => (t === msg ? null : t)), 2200);
+    later(() => setToast((t) => (t === msg ? null : t)), 2600);
   }
 
   function toggle(i: number) {
     if (busy) return;
     if (load.includes(i)) return setLoad(load.filter((x) => x !== i));
-    if (st.side[i] !== st.boat) return say('The boat is on the other side of the river.');
-    if (load.length >= p.capacity) return say(`The boat only has ${p.capacity} seat${p.capacity > 1 ? 's' : ''}.`);
+    if (st.side[i] !== st.boat) return say('The raft is on the other side of the river.');
+    if (seatsUsed(p, [...load, i]) > p.capacity)
+      return say(p.kinds[i] === 'bear' ? 'The bear needs 2 free seats.' : `The raft only has ${p.capacity} seat${p.capacity > 1 ? 's' : ''}.`);
     setLoad([...load, i]);
+  }
+
+  function showHint() {
+    if (busy) return;
+    const path = solve(p, st);
+    if (!path?.length) return;
+    hintsUsed.current++;
+    setHint({ load: path[0], text: `${describeTrip(p, path[0], st.boat)} (${path.length} trip${path.length > 1 ? 's' : ''} left from here)` });
   }
 
   function sail() {
@@ -99,14 +164,14 @@ export default function FerryGame({ onFinish }: GameProps) {
     const problem = boatProblem(p, load);
     if (problem) return say(problem);
     if (firstSail.current === null) firstSail.current = performance.now();
-    const danger = conflict(p.kinds, leftBehind(st, load));
+    const danger = tripConflict(p, st, load);
     const used = crossings + 1;
     setCrossings(used);
     setSailing(true);
+    setHint(null);
     later(() => {
       if (danger) {
-        const [a, b] = danger;
-        setEaten({ pair: [a, b], text: `While the sailor was away, the ${LABEL[p.kinds[a]].toLowerCase()} ate the ${LABEL[p.kinds[b]].toLowerCase()}!` });
+        setEaten(danger);
         setFailures((f) => f + 1);
         return;
       }
@@ -129,12 +194,14 @@ export default function FerryGame({ onFinish }: GameProps) {
     if (busy) return;
     setSt(fresh(p));
     setLoad([]);
+    setHint(null);
   }
 
   function complete(solved: boolean, used: number) {
     const now = performance.now();
     const min = mins[idx];
     recs.current.push({
+      title: p.title,
       min,
       crossings: used,
       failures,
@@ -142,6 +209,7 @@ export default function FerryGame({ onFinish }: GameProps) {
       planMs: (firstSail.current ?? now) - t0.current,
       totalMs: now - t0.current,
     });
+    setHint(null);
     setBanner(
       solved
         ? used === min && failures === 0
@@ -150,10 +218,10 @@ export default function FerryGame({ onFinish }: GameProps) {
         : { ok: false, title: 'Puzzle skipped', text: `This one can be done in ${min} trips.` },
     );
     later(() => {
-      if (idx + 1 >= PUZZLES.length) return onFinish(analyse(recs.current));
+      if (idx + 1 >= puzzles.length) return onFinish(practice ? practiceResult(recs.current, hintsUsed.current) : analyse(recs.current));
       const n = idx + 1;
       setIdx(n);
-      setSt(fresh(PUZZLES[n]));
+      setSt(fresh(puzzles[n]));
       setLoad([]);
       setSailing(false);
       setEaten(null);
@@ -165,16 +233,20 @@ export default function FerryGame({ onFinish }: GameProps) {
     }, 2800);
   }
 
-  const bank = (side: 0 | 1) =>
-    p.kinds.map((k, i) => ({ k, i })).filter(({ i }) => st.side[i] === side && !load.includes(i));
+  const eatenText = eaten
+    ? sailor
+      ? `While the sailor was away, ${eaten.text}!`
+      : `Oh dear: ${eaten.text}!`
+    : '';
 
   return (
     <div className="stage ferry-stage">
       <div className="hud">
         <div className="hud-group">
           <span className="pill">
-            Puzzle {idx + 1} / {PUZZLES.length}
+            Puzzle {idx + 1} / {puzzles.length}
           </span>
+          <span className={`pill tier-${p.tier}`}>{TIER_LABEL[p.tier]}</span>
           <span className="pill">
             Trips <strong>{crossings}</strong>
           </span>
@@ -182,6 +254,11 @@ export default function FerryGame({ onFinish }: GameProps) {
           {failures > 0 && <span className="pill pill-bad">Failed attempts: {failures}</span>}
         </div>
         <div className="hud-group">
+          {practice && (
+            <button className="btn btn-secondary btn-sm" onClick={showHint} disabled={busy}>
+              💡 Hint
+            </button>
+          )}
           <button className="btn btn-secondary btn-sm" onClick={restart} disabled={busy}>
             <RetryIcon size={16} /> Restart
           </button>
@@ -191,7 +268,7 @@ export default function FerryGame({ onFinish }: GameProps) {
         </div>
       </div>
       <div className="progress-dots">
-        {PUZZLES.map((_, i) => (
+        {puzzles.map((_, i) => (
           <span key={i} className={i < idx ? 'done' : i === idx ? 'current' : ''} />
         ))}
       </div>
@@ -201,6 +278,29 @@ export default function FerryGame({ onFinish }: GameProps) {
         <Rules p={p} />
       </div>
 
+      {practice && (
+        <div className="explain ferry-explain">
+          {hint ? (
+            <>
+              <strong>Hint</strong>
+              {hint.text} The characters to take are marked with a yellow diamond.
+            </>
+          ) : idx === 0 ? (
+            <>
+              <strong>How this works</strong>
+              The sailor rows and protects the bank he is on. Before every trip, check the bank you are leaving: who would be alone together?
+              Stuck? Press Hint to see the best next trip.
+            </>
+          ) : (
+            <>
+              <strong>No sailor this time</strong>
+              Someone on board has to row, and the rules now apply everywhere: on the bank you leave, on the raft, and on the bank you arrive
+              at. The hardest puzzles in the real test work like this.
+            </>
+          )}
+        </div>
+      )}
+
       <div className="river-scene">
         <FerryScene
           key={idx}
@@ -209,9 +309,10 @@ export default function FerryGame({ onFinish }: GameProps) {
           load={load}
           sailing={sailing}
           boatSide={boatShown as 0 | 1}
-          eaten={eaten?.pair ?? null}
+          eaten={eaten ? { pair: [eaten.by, eaten.victim], vanish: eaten.vanish } : null}
           celebrate={!!banner?.ok}
           busy={busy}
+          hinted={hint?.load ?? []}
           onPick={toggle}
           onSail={sail}
         />
@@ -222,7 +323,8 @@ export default function FerryGame({ onFinish }: GameProps) {
           <div className="overlay overlay-bad overlay-delayed">
             <div className="overlay-card">
               <h3>Oh no!</h3>
-              <p>{eaten.text}</p>
+              <p>{eatenText}</p>
+              {practice && <p className="small">Everyone goes back to the start. Look at who was left together on that trip.</p>}
               <button className="btn btn-primary" onClick={retry}>
                 <RetryIcon size={16} /> Try again
               </button>
@@ -242,8 +344,9 @@ export default function FerryGame({ onFinish }: GameProps) {
 
       <div className="ferry-actions">
         <p className="muted small">
-          Click a character on the boat's side to board them, and click them again to get off. Click the sailor or the raft (or the button) to sail. Passengers stay on board until you
-          click them off. The sailor can also cross alone.
+          Click a character on the raft's side to board them, and click them again to get off. Click the raft (or the button) to sail.
+          Passengers stay on board until you click them off.
+          {sailor ? ' The sailor can also cross alone.' : ' Without a sailor, someone who can row must be on board.'}
         </p>
         <button className="btn btn-primary btn-lg accent-btn" onClick={sail} disabled={busy}>
           {boatShown === 0 ? 'Sail across' : 'Sail back'}
@@ -254,6 +357,22 @@ export default function FerryGame({ onFinish }: GameProps) {
 }
 
 /* ---------- Analysis ---------- */
+
+function practiceResult(recs: Rec[], hints: number): GameResult {
+  const solved = recs.filter((r) => r.solved).length;
+  return {
+    score: 0,
+    metrics: [
+      { label: 'Puzzles solved', value: `${solved}/${recs.length}` },
+      { label: 'Hints used', value: String(hints) },
+      { label: 'Passengers lost', value: String(sum(recs.map((r) => r.failures))) },
+    ],
+    strengths: [],
+    improvements: [
+      'The real test has 8 puzzles that get harder: wolves that count, a bear that takes two seats, a sheepdog that guards, and the police-and-thief puzzles. There are no hints.',
+    ],
+  };
+}
 
 function analyse(recs: Rec[]): GameResult {
   const n = recs.length;
@@ -284,17 +403,19 @@ function analyse(recs: Rec[]): GameResult {
 
   if (solved === n) strengths.push(`You got everyone across in all ${n} puzzles.`);
   if (perfect >= n / 2) strengths.push(`${perfect} perfect crossings: minimum trips and no accidents.`);
-  if (totalFailures === 0) strengths.push('Not a single passenger was eaten. You checked what you left behind every time.');
+  if (totalFailures === 0) strengths.push('Not a single passenger was lost. You checked what you left behind every time.');
   if (eff >= 0.85) strengths.push(`High efficiency: you used only ${extra} extra trips across all solved puzzles.`);
   if (deliberate && efficient) strengths.push('Your planning time up front clearly paid off.');
+  const expert = recs.slice(-2).filter((r) => r.solved).length;
+  if (expert === 2) strengths.push('You cracked both expert puzzles. Those are the kind used in real IQ-style tests.');
 
   if (totalFailures >= 3)
-    improvements.push(`${totalFailures} attempts ended with someone being eaten. Before each trip, look at the bank you are leaving and ask: "Who is left alone together?"`);
+    improvements.push(`${totalFailures} attempts ended badly. Before each trip, look at every group that will be alone (the bank you leave, and without a sailor also the raft and the bank you arrive at) and ask: "Who is left together?"`);
   if (eff < 0.75)
     improvements.push('You used quite a few extra trips. Remember that you can bring a passenger back. Temporarily returning the "dangerous" one is often the key move.');
   if (!deliberate && !efficient)
     improvements.push(`You set sail after ${secs(avgPlan)} on average. Try mentally playing out the first 3 trips before you start, and the accidents will drop.`);
-  if (solved < n) improvements.push(`${n - solved} puzzle(s) were skipped. When stuck, work out which passenger is the "troublemaker" that can't be left with anyone, and plan around it.`);
+  if (solved < n) improvements.push(`${n - solved} puzzle(s) were skipped. When stuck, work out which character is the "troublemaker" that can't be left with anyone, and plan around it.`);
   if (deliberate && !efficient)
     improvements.push('Break the puzzle into stages: first, which passenger can safely go alone? Then what must come back so the next one can go?');
 
@@ -308,7 +429,7 @@ function analyse(recs: Rec[]): GameResult {
       { label: 'Puzzles solved', value: `${solved}/${n}` },
       { label: 'Perfect crossings', value: `${perfect}/${n}`, hint: 'Minimum trips, no accidents' },
       { label: 'Trip efficiency', value: pct(eff), hint: 'Minimum trips ÷ trips you used' },
-      { label: 'Passengers eaten', value: String(totalFailures), hint: 'Failed attempts' },
+      { label: 'Failed attempts', value: String(totalFailures), hint: 'Someone eaten or robbed' },
       { label: 'Planning time', value: secs(avgPlan), hint: 'Before your first trip' },
       { label: 'Time per puzzle', value: secs(avgTotal) },
     ],
@@ -317,9 +438,9 @@ function analyse(recs: Rec[]): GameResult {
     chart: {
       title: 'Trip efficiency per puzzle',
       max: 100,
-      note: '100% means you used the minimum number of trips (failed attempts count too).',
-      bars: recs.map((r, i) => ({
-        label: PUZZLES[i].title,
+      note: 'Puzzles go from warm-up to expert. 100% means you used the minimum number of trips (failed attempts count too).',
+      bars: recs.map((r) => ({
+        label: r.title,
         value: effOf(r) * 100,
         display: r.solved ? `${r.crossings} trips · min ${r.min}` : `Skipped · min ${r.min}`,
       })),

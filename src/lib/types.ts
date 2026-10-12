@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react';
 
-export type GameId = 'ferry' | 'racer' | 'birds' | 'fish';
+export type GameId = 'ferry' | 'racer' | 'birds' | 'fish' | 'matrix' | 'numbers' | 'tower' | 'switch' | 'focus';
 
 export interface Metric {
   label: string;
@@ -33,6 +33,8 @@ export interface GameResult {
 
 export interface GameProps {
   onFinish: (result: GameResult) => void;
+  /** A short, untimed (or gentler) warm-up with extra explanations. Its result is not saved. */
+  practice: boolean;
 }
 
 export interface GameMeta {
@@ -42,6 +44,8 @@ export interface GameMeta {
   tagline: string;
   measures: string;
   howTo: string[];
+  /** What the practice round contains, shown on the intro screen. */
+  practice: string;
   duration: string;
   accent: string;
   Icon: ComponentType<{ size?: number }>;

@@ -39,6 +39,19 @@ const PLAN: [number, QType][] = [
   [5, 'reverse'], [6, 'last'], [6, 'most'], [7, 'reverse'], [7, 'where'],
 ];
 
+/** Practice: three short, slower rounds covering location, order and counting. */
+const PRACTICE_PLAN: [number, QType][] = [[2, 'where'], [3, 'forward'], [3, 'total']];
+
+/** Memory strategies shown after each practice answer. */
+const TIP: Record<QType, string> = {
+  where: 'Name each group as it appears, including its spot: "blue stripes, north-east". A verbal label is easier to recall than a picture.',
+  forward: 'Rehearse the route as it builds up: "top-left, then bottom-right, then …". Repeating the whole list each time keeps it fresh.',
+  reverse: 'Store the sequence forwards, then read it back from the end when the question comes.',
+  most: 'Keep a running count per area of the pond instead of trying to recall every group at the end.',
+  total: 'Keep a running total in your head: 2… 3… 5…. Updating a number is far easier than adding everything up afterwards.',
+  last: 'The most recent item is usually the easiest to recall, so trust your first impression.',
+};
+
 const PROMPT: Record<QType, string> = {
   where: 'Where did this fish group appear?',
   forward: 'Tap the spots in the order the fish appeared.',
@@ -99,8 +112,8 @@ function FishGroup({ g, width }: { g: Group; width: number }) {
   return src ? <img className="fish-pic" src={src} width={width} height={width * (140 / 220)} alt={`${g.count} ${g.color} ${g.pattern} fish`} /> : null;
 }
 
-export default function FishGame({ onFinish }: GameProps) {
-  const [rounds] = useState(() => PLAN.map(([l, t]) => buildRound(l, t)));
+export default function FishGame({ onFinish, practice }: GameProps) {
+  const [rounds] = useState(() => (practice ? PRACTICE_PLAN : PLAN).map(([l, t]) => buildRound(l, t)));
   const [ri, setRi] = useState(0);
   const [phase, setPhase] = useState<'intro' | 'ready' | 'show' | 'question' | 'feedback'>('intro');
   const [step, setStep] = useState(-1);
@@ -111,7 +124,7 @@ export default function FishGame({ onFinish }: GameProps) {
   const later = useTimeouts();
 
   const round = rounds[ri];
-  const showMs = ri < 4 ? 1800 : ri < 7 ? 1650 : 1500;
+  const showMs = practice ? 2200 : ri < 4 ? 1800 : ri < 7 ? 1650 : 1500;
 
   useEffect(() => {
     if (phase === 'ready') later(() => { setStep(0); setPhase('show'); }, 1200);
@@ -173,7 +186,7 @@ export default function FishGame({ onFinish }: GameProps) {
   }
 
   function next() {
-    if (ri + 1 >= rounds.length) return onFinish(analyse(recs.current));
+    if (ri + 1 >= rounds.length) return onFinish(practice ? practiceResult(recs.current) : analyse(recs.current));
     setRi(ri + 1);
     setTaps([]);
     setFb(null);
@@ -240,8 +253,9 @@ export default function FishGame({ onFinish }: GameProps) {
             <div className="overlay">
               <div className="overlay-card">
                 <span className="eyebrow">Memory pond</span>
-                <h3>Remember the fish</h3>
+                <h3>{practice ? 'Practice: 3 short rounds' : 'Remember the fish'}</h3>
                 <p>
+                  {practice && 'The fish stay up a little longer in practice, and after each answer you get a memory tip. '}
                   Groups of fish leap out of the water by the lily pads, one at a time. Remember <strong>where</strong>,{' '}
                   <strong>in which order</strong>, <strong>how many</strong> and <strong>what they looked like</strong>. You won't know the
                   question until the end.
@@ -324,6 +338,12 @@ export default function FishGame({ onFinish }: GameProps) {
                   {fb.text}
                 </div>
               )}
+              {phase === 'feedback' && practice && (
+                <div className="explain">
+                  <strong>Memory tip</strong>
+                  {TIP[round.type]}
+                </div>
+              )}
               {phase === 'feedback' && (
                 <button className="btn btn-primary btn-lg accent-btn" onClick={next}>
                   {ri + 1 >= rounds.length ? 'See results' : 'Next round'}
@@ -353,6 +373,20 @@ export default function FishGame({ onFinish }: GameProps) {
 }
 
 /* ---------- Analysis ---------- */
+
+function practiceResult(recs: Rec[]): GameResult {
+  return {
+    score: 0,
+    metrics: [
+      { label: 'Rounds fully correct', value: `${recs.filter((r) => r.credit === 1).length} / ${recs.length}` },
+      { label: 'Average credit', value: pct(mean(recs.map((r) => r.credit))) },
+    ],
+    strengths: [],
+    improvements: [
+      'The real test has 10 rounds, from 3 up to 7 fish groups, shown faster each time. The question types include reverse order and "which area had the most fish", so track position, order and count from the start.',
+    ],
+  };
+}
 
 const CATS: Record<string, QType[]> = {
   Order: ['forward', 'reverse'],

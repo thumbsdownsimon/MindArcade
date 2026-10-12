@@ -14,9 +14,15 @@ export interface PersonLook {
   beard?: string;
   /** Darker band across the shirt, e.g. a sailor's stripes. */
   stripe?: string;
-  hat?: 'captain' | 'cap' | 'bow';
+  hat?: 'captain' | 'cap' | 'bow' | 'police' | 'beanie';
   hatColor?: string;
   kid?: boolean;
+  /** Hair down to the shoulders. */
+  longHair?: boolean;
+  /** A burglar's eye mask. */
+  mask?: boolean;
+  /** A small badge on the chest. */
+  badge?: string;
 }
 
 /** Minecraft-proportioned person, about 2 units tall (kids ~1.55). Bones: body, head, armL/R, legL/R. */
@@ -69,10 +75,31 @@ export function person(l: PersonLook): Model {
       box([0.12, 0.14, 0.08], [-0.11, head + 0.03, -0.1], l.hatColor ?? '#ec4899'),
       box([0.12, 0.14, 0.08], [0.11, head + 0.03, -0.1], l.hatColor ?? '#ec4899'),
     );
+  if (l.hat === 'police')
+    headParts.push(
+      box([head + 0.12, 0.2, head + 0.12], [0, head + 0.09, 0], l.hatColor ?? '#1e3a8a'),
+      box([head + 0.14, 0.06, head + 0.14], [0, head - 0.01, 0], '#0f172a'),
+      box([head * 0.7, 0.04, 0.18], [0, head - 0.02, head / 2 + 0.11], '#0f172a'),
+      box([0.12, 0.1, 0.02], [0, head + 0.1, head / 2 + 0.07], '#facc15'),
+    );
+  if (l.hat === 'beanie')
+    headParts.push(
+      box([head + 0.06, 0.2, head + 0.06], [0, head + 0.04, 0], l.hatColor ?? '#334155'),
+      box([head + 0.08, 0.07, head + 0.08], [0, head - 0.06, 0], l.hatColor ?? '#334155'),
+    );
+  if (l.longHair)
+    headParts.push(
+      box([head + 0.06, head * 0.95, 0.1], [0, head * 0.42, -head / 2 - 0.02], l.hair),
+      box([0.07, head * 0.85, head * 0.55], [head / 2 + 0.01, head * 0.45, -0.12], l.hair),
+      box([0.07, head * 0.85, head * 0.55], [-head / 2 - 0.01, head * 0.45, -0.12], l.hair),
+    );
+  if (l.mask)
+    headParts.push(box([head + 0.03, 0.14, 0.03], [0, eyeY, head / 2 + 0.012], '#111827'), box([0.05, 0.08, 0.035], [-0.11, eyeY, head / 2 + 0.02], '#ffffff'), box([0.05, 0.08, 0.035], [0.11, eyeY, head / 2 + 0.02], '#ffffff'));
 
   const bodyParts: Part[] = [box([0.5, torso, 0.27], [0, hip + torso / 2, 0], l.shirt)];
   if (l.stripe)
     for (let i = 0; i < 3; i++) bodyParts.push(box([0.52, 0.07, 0.29], [0, hip + torso * (0.25 + i * 0.25), 0], l.stripe));
+  if (l.badge) bodyParts.push(box([0.1, 0.1, 0.02], [-0.13, hip + torso * 0.75, 0.145], l.badge));
   bodyParts.push(box([0.52, 0.08, 0.29], [0, hip + 0.04, 0], l.pants)); // belt line
 
   const armLen = torso;
@@ -100,10 +127,42 @@ export function person(l: PersonLook): Model {
 
 /** Bones: body, head, tail, legFL/FR/BL/BR. About 1.1 long, 0.9 tall. */
 export function fox(dark: boolean): Model {
-  const fur = dark ? '#2b2d38' : '#e8772e';
-  const furDark = dark ? '#16171f' : '#b4521a';
-  const belly = dark ? '#5b5f70' : '#fff7ed';
-  const eye = dark ? '#f43f5e' : '#1f2937';
+  return dark
+    ? canine({ fur: '#2b2d38', furDark: '#16171f', belly: '#5b5f70', eye: '#f43f5e', tip: '#9ca3af' })
+    : canine({ fur: '#e8772e', furDark: '#b4521a', belly: '#fff7ed', eye: '#1f2937', tip: '#fff7ed' });
+}
+
+/** A grey wolf: the fox shape with a heavier snout and yellow eyes. */
+export function wolf(): Model {
+  const m = canine({ fur: '#8b93a3', furDark: '#565d6b', belly: '#d7dce4', eye: '#facc15', tip: '#4b5260' });
+  m.head.parts.push(box([0.26, 0.12, 0.12], [0, 0.0, 0.5], '#d7dce4'), box([0.08, 0.07, 0.04], [0, 0.07, 0.57], '#111'));
+  return m;
+}
+
+/** A black-and-white sheepdog with floppy ears and a collar. */
+export function dog(): Model {
+  const m = canine({ fur: '#1f2937', furDark: '#111827', belly: '#f8fafc', eye: '#fbbf24', tip: '#f8fafc' });
+  // Swap the pointy ears for floppy ones, and add a white blaze and a red collar.
+  m.head.parts = m.head.parts.filter((p) => p.p[1] < 0.3);
+  m.head.parts.push(
+    box([0.08, 0.2, 0.14], [-0.24, 0.16, 0.1], '#111827'),
+    box([0.08, 0.2, 0.14], [0.24, 0.16, 0.1], '#111827'),
+    box([0.1, 0.3, 0.02], [0, 0.18, 0.345], '#f8fafc'),
+    box([0.46, 0.08, 0.4], [0, -0.1, 0.12], '#dc2626'),
+    box([0.08, 0.08, 0.04], [0, -0.15, 0.33], '#facc15'),
+  );
+  return m;
+}
+
+interface CaninePalette {
+  fur: string;
+  furDark: string;
+  belly: string;
+  eye: string;
+  tip: string;
+}
+
+function canine({ fur, furDark, belly, eye, tip }: CaninePalette): Model {
   const leg = (): Part[] => [box([0.14, 0.32, 0.14], [0, -0.16, 0], furDark), box([0.15, 0.08, 0.17], [0, -0.3, 0.02], '#1f1f24')];
   return {
     body: {
@@ -127,12 +186,81 @@ export function fox(dark: boolean): Model {
     },
     tail: {
       pivot: [0, 0.6, -0.4],
-      parts: [box([0.2, 0.2, 0.5], [0, 0.04, -0.25], fur), box([0.21, 0.21, 0.14], [0, 0.04, -0.52], dark ? '#9ca3af' : '#fff7ed')],
+      parts: [box([0.2, 0.2, 0.5], [0, 0.04, -0.25], fur), box([0.21, 0.21, 0.14], [0, 0.04, -0.52], tip)],
     },
     legFL: { pivot: [-0.13, 0.36, 0.28], parts: leg() },
     legFR: { pivot: [0.13, 0.36, 0.28], parts: leg() },
     legBL: { pivot: [-0.13, 0.36, -0.28], parts: leg() },
     legBR: { pivot: [0.13, 0.36, -0.28], parts: leg() },
+  };
+}
+
+/** A woolly sheep. Same bones as the fox so it can share the four-legged animation. */
+export function sheep(): Model {
+  const wool = '#f5f5f0';
+  const woolShade = '#e4e4dc';
+  const face = '#3f3f46';
+  const leg = (): Part[] => [box([0.12, 0.3, 0.12], [0, -0.15, 0], face), box([0.13, 0.07, 0.14], [0, -0.29, 0.01], '#18181b')];
+  return {
+    body: {
+      pivot: [0, 0, 0],
+      parts: [
+        box([0.56, 0.44, 0.78], [0, 0.56, 0], wool),
+        box([0.6, 0.18, 0.5], [0, 0.72, 0.02], woolShade),
+        box([0.5, 0.12, 0.7], [0, 0.32, 0], woolShade),
+      ],
+    },
+    head: {
+      pivot: [0, 0.66, 0.38],
+      parts: [
+        box([0.3, 0.32, 0.3], [0, 0.06, 0.16], face),
+        box([0.36, 0.14, 0.2], [0, 0.26, 0.1], wool),
+        box([0.14, 0.08, 0.12], [-0.21, 0.12, 0.08], face),
+        box([0.14, 0.08, 0.12], [0.21, 0.12, 0.08], face),
+        box([0.06, 0.06, 0.02], [-0.08, 0.1, 0.315], '#ffffff'),
+        box([0.06, 0.06, 0.02], [0.08, 0.1, 0.315], '#ffffff'),
+        box([0.03, 0.06, 0.025], [-0.07, 0.1, 0.32], '#111827'),
+        box([0.03, 0.06, 0.025], [0.09, 0.1, 0.32], '#111827'),
+      ],
+    },
+    tail: { pivot: [0, 0.62, -0.4], parts: [box([0.16, 0.16, 0.12], [0, 0, -0.04], wool)] },
+    legFL: { pivot: [-0.16, 0.34, 0.26], parts: leg() },
+    legFR: { pivot: [0.16, 0.34, 0.26], parts: leg() },
+    legBL: { pivot: [-0.16, 0.34, -0.26], parts: leg() },
+    legBR: { pivot: [0.16, 0.34, -0.26], parts: leg() },
+  };
+}
+
+/** A big brown bear, about twice the bulk of the fox. Same bones as the fox. */
+export function bear(): Model {
+  const fur = '#7c4a24';
+  const dark = '#5a3418';
+  const muzzle = '#c8a27a';
+  const leg = (): Part[] => [box([0.26, 0.42, 0.26], [0, -0.21, 0], dark), box([0.28, 0.08, 0.3], [0, -0.38, 0.02], '#2a1a0e')];
+  return {
+    body: {
+      pivot: [0, 0, 0],
+      parts: [box([0.78, 0.62, 1.15], [0, 0.78, 0], fur), box([0.7, 0.3, 0.5], [0, 1.08, 0.25], fur), box([0.6, 0.1, 0.9], [0, 0.46, 0.02], dark)],
+    },
+    head: {
+      pivot: [0, 0.98, 0.56],
+      parts: [
+        box([0.56, 0.5, 0.46], [0, 0.1, 0.2], fur),
+        box([0.3, 0.22, 0.2], [0, 0.0, 0.5], muzzle),
+        box([0.12, 0.09, 0.05], [0, 0.07, 0.61], '#111'),
+        box([0.16, 0.16, 0.1], [-0.22, 0.4, 0.12], fur),
+        box([0.16, 0.16, 0.1], [0.22, 0.4, 0.12], fur),
+        box([0.08, 0.08, 0.02], [-0.22, 0.4, 0.175], muzzle),
+        box([0.08, 0.08, 0.02], [0.22, 0.4, 0.175], muzzle),
+        box([0.08, 0.08, 0.02], [-0.14, 0.2, 0.435], '#111827'),
+        box([0.08, 0.08, 0.02], [0.14, 0.2, 0.435], '#111827'),
+      ],
+    },
+    tail: { pivot: [0, 0.9, -0.58], parts: [box([0.18, 0.16, 0.12], [0, 0, -0.04], dark)] },
+    legFL: { pivot: [-0.24, 0.46, 0.38], parts: leg() },
+    legFR: { pivot: [0.24, 0.46, 0.38], parts: leg() },
+    legBL: { pivot: [-0.24, 0.46, -0.38], parts: leg() },
+    legBR: { pivot: [0.24, 0.46, -0.38], parts: leg() },
   };
 }
 

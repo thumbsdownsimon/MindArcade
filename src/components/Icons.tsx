@@ -124,3 +124,52 @@ export const LogoMark = ({ size = 18 }: P) => (
     <path d="M5 17V7l7 6 7-6v10" />
   </svg>
 );
+
+export const MatrixIcon = ({ size }: P) => (
+  <Svg size={size}>
+    <rect x="3" y="3" width="5" height="5" rx="1" />
+    <rect x="10" y="3" width="5" height="5" rx="1" />
+    <rect x="17" y="3" width="4" height="5" rx="1" />
+    <rect x="3" y="10" width="5" height="5" rx="1" />
+    <circle cx="12.5" cy="12.5" r="2.5" />
+    <rect x="17" y="10" width="4" height="5" rx="1" />
+    <rect x="3" y="17" width="5" height="4" rx="1" />
+    <rect x="10" y="17" width="5" height="4" rx="1" />
+    <path d="M18 18.5h2M19 17.5v2" />
+  </Svg>
+);
+
+export const NumbersIcon = ({ size }: P) => (
+  <Svg size={size}>
+    <path d="M3 21h18" />
+    <rect x="5" y="12" width="3" height="9" rx="1" />
+    <rect x="10.5" y="7" width="3" height="14" rx="1" />
+    <rect x="16" y="3" width="3" height="18" rx="1" />
+  </Svg>
+);
+
+export const TowerIcon = ({ size }: P) => (
+  <Svg size={size}>
+    <path d="M2 21h20" />
+    <path d="M5 21V8M12 21V11M19 21V14" />
+    <rect x="3" y="15" width="4" height="3" rx="1" />
+    <rect x="10" y="17" width="4" height="3" rx="1" />
+    <rect x="17" y="17" width="4" height="3" rx="1" />
+  </Svg>
+);
+
+export const SwitchIcon = ({ size }: P) => (
+  <Svg size={size}>
+    <rect x="3" y="4" width="8" height="11" rx="1.5" />
+    <rect x="13" y="9" width="8" height="11" rx="1.5" />
+    <path d="M7 18v2h4M17 6V4h-4" />
+  </Svg>
+);
+
+export const FocusIcon = ({ size }: P) => (
+  <Svg size={size}>
+    <circle cx="12" cy="12" r="8.5" />
+    <circle cx="12" cy="12" r="4.5" />
+    <circle cx="12" cy="12" r="1" />
+  </Svg>
+);

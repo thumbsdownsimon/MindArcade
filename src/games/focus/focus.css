@@ -1,0 +1,59 @@
+/* A dark screen in both themes, so the ink colours read the same for everyone. */
+.fs-screen {
+  position: relative;
+  height: 360px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: #0f172a;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
+  overflow: hidden;
+}
+
+.fs-stim {
+  display: grid;
+  place-items: center;
+  min-height: 120px;
+  user-select: none;
+}
+
+.fs-fix { font-size: 56px; font-weight: 300; color: #94a3b8; }
+.fs-arrows { font-size: 64px; font-weight: 700; letter-spacing: .08em; color: #f8fafc; }
+.fs-word { font-size: 64px; font-weight: 900; letter-spacing: .04em; }
+.fs-letter { font-size: 96px; font-weight: 800; color: #f8fafc; }
+.fs-letter.hidden { visibility: hidden; }
+
+@media (max-width: 560px) {
+  .fs-arrows, .fs-word { font-size: 44px; }
+  .fs-screen { height: 300px; }
+}
+
+.fs-fb {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  padding: 8px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  color: #fff;
+  animation: fade-up .15s ease-out;
+}
+
+.fs-fb.ok { background: #16a34a; }
+.fs-fb.bad { background: #dc2626; }
+
+.fs-controls {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.fs-btn { min-width: 130px; touch-action: manipulation; }
+.fs-match { min-width: 220px; }
+.fs-btn kbd { color: inherit; }

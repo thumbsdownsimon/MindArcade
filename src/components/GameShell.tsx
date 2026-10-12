@@ -1,13 +1,16 @@
 import { Suspense, useState, type CSSProperties } from 'react';
 import type { GameMeta, GameResult } from '../lib/types';
 import { bestScore, gameHistory, saveResult } from '../lib/storage';
-import { ArrowLeft, ClockIcon, PlayIcon, TargetIcon } from './Icons';
+import { ArrowLeft, CheckIcon, ClockIcon, PlayIcon, RetryIcon, TargetIcon } from './Icons';
 import ResultsView from './ResultsView';
 
+type Phase = 'intro' | 'practice' | 'practiceDone' | 'play' | 'results';
+
 export default function GameShell({ game }: { game: GameMeta }) {
-  const [phase, setPhase] = useState<'intro' | 'play' | 'results'>('intro');
+  const [phase, setPhase] = useState<Phase>('intro');
   const [run, setRun] = useState(0);
   const [result, setResult] = useState<GameResult | null>(null);
+  const [practiceResult, setPracticeResult] = useState<GameResult | null>(null);
   const [prevBest, setPrevBest] = useState<number | null>(null);
   const [prevPlays, setPrevPlays] = useState(0);
 
@@ -20,9 +23,16 @@ export default function GameShell({ game }: { game: GameMeta }) {
     window.scrollTo(0, 0);
   }
 
-  function start() {
+  // Practice results are never saved: they only tell the player they're ready.
+  function finishPractice(r: GameResult) {
+    setPracticeResult(r);
+    setPhase('practiceDone');
+    window.scrollTo(0, 0);
+  }
+
+  function go(next: 'practice' | 'play') {
     setRun((n) => n + 1);
-    setPhase('play');
+    setPhase(next);
     window.scrollTo(0, 0);
   }
 
@@ -31,11 +41,12 @@ export default function GameShell({ game }: { game: GameMeta }) {
   if (phase === 'results' && result)
     return (
       <div style={style}>
-        <ResultsView game={game} result={result} prevBest={prevBest} prevPlays={prevPlays} onReplay={start} />
+        <ResultsView game={game} result={result} prevBest={prevBest} prevPlays={prevPlays} onReplay={() => go('play')} onPractice={() => go('practice')} />
       </div>
     );
 
-  if (phase === 'play')
+  if (phase === 'practice' || phase === 'play') {
+    const practice = phase === 'practice';
     return (
       <div style={style} className="play">
         <div className="play-bar">
@@ -47,13 +58,60 @@ export default function GameShell({ game }: { game: GameMeta }) {
               <game.Icon size={18} />
             </span>
             <strong>{game.title}</strong>
-            <span className="skill-tag">{game.skill}</span>
+            {practice ? <span className="practice-tag">Practice</span> : <span className="skill-tag">{game.skill}</span>}
           </div>
-          <span className="play-bar-spacer" />
+          <span className="play-bar-spacer">
+            {practice && (
+              <button className="btn btn-ghost btn-sm" onClick={() => go('play')}>
+                Skip to real test
+              </button>
+            )}
+          </span>
         </div>
         <Suspense fallback={<div className="stage game-loading">Loading game…</div>}>
-          <game.Component key={run} onFinish={finish} />
+          <game.Component key={run} practice={practice} onFinish={practice ? finishPractice : finish} />
         </Suspense>
+      </div>
+    );
+  }
+
+  if (phase === 'practiceDone')
+    return (
+      <div style={style} className="intro">
+        <div className="card intro-card practice-done">
+          <span className="practice-done-icon">
+            <CheckIcon size={30} />
+          </span>
+          <span className="practice-tag">Practice complete</span>
+          <h1>You're ready for the real test</h1>
+          <p className="muted">
+            The real {game.title} is {game.duration} long and is scored. Practice rounds are never saved, so feel free to practise again
+            if anything felt unclear.
+          </p>
+          {practiceResult && practiceResult.metrics.length > 0 && (
+            <div className="practice-metrics">
+              {practiceResult.metrics.slice(0, 4).map((m) => (
+                <div key={m.label} className="card-inset practice-metric">
+                  <strong>{m.value}</strong>
+                  <span className="muted small">{m.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {practiceResult?.improvements[0] && (
+            <p className="practice-tip">
+              <TargetIcon /> <span>{practiceResult.improvements[0]}</span>
+            </p>
+          )}
+          <div className="practice-done-actions">
+            <button className="btn btn-secondary btn-lg" onClick={() => go('practice')}>
+              <RetryIcon /> Practise again
+            </button>
+            <button className="btn btn-primary btn-lg accent-btn" onClick={() => go('play')}>
+              <PlayIcon /> Start the real test
+            </button>
+          </div>
+        </div>
       </div>
     );
 
@@ -92,13 +150,23 @@ export default function GameShell({ game }: { game: GameMeta }) {
           ))}
         </ol>
 
+        <div className="intro-practice">
+          <span className="practice-tag">Practice round</span>
+          <p>{game.practice} Practice results are not saved.</p>
+        </div>
+
         <div className="intro-foot">
           <span className="foot-item muted">
             <ClockIcon /> About {game.duration}
           </span>
-          <button className="btn btn-primary btn-lg accent-btn" onClick={start}>
-            <PlayIcon /> Start game
-          </button>
+          <div className="intro-buttons">
+            <button className="btn btn-secondary btn-lg" onClick={() => go('play')}>
+              Skip to real test
+            </button>
+            <button className="btn btn-primary btn-lg accent-btn" onClick={() => go('practice')}>
+              <PlayIcon /> Start with practice
+            </button>
+          </div>
         </div>
       </div>
     </div>
