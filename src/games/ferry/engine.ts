@@ -158,9 +158,10 @@ export function tripConflict(p: Puzzle, s: State, load: number[]): Conflict | nu
   return conflict(p.kinds, [...s.side.map((_, i) => i).filter((i) => s.side[i] === to), ...load]);
 }
 
-const key = (s: State) => s.side.join('') + s.boat;
+export const stateKey = (s: State) => s.side.join('') + s.boat;
 
-function subsets(ids: number[], max: number): number[][] {
+/** Every group of up to `max` of `ids`, including the empty one. */
+export function subsets(ids: number[], max: number): number[][] {
   const out: number[][] = [[]];
   for (const id of ids) {
     const n = out.length;
@@ -171,23 +172,23 @@ function subsets(ids: number[], max: number): number[][] {
 
 /** Breadth-first search from `start`. Returns the loads of a shortest solution, or null when unsolvable. */
 export function solve(p: Puzzle, start: State = { side: p.kinds.map(() => 0), boat: 0 }): number[][] | null {
-  const prev = new Map<string, { from: string; load: number[] } | null>([[key(start), null]]);
+  const prev = new Map<string, { from: string; load: number[] } | null>([[stateKey(start), null]]);
   let frontier = [start];
   while (frontier.length) {
     const next: State[] = [];
     for (const s of frontier) {
       if (s.side.every((x) => x === 1)) {
         const path: number[][] = [];
-        for (let k = key(s), step = prev.get(k); step; k = step.from, step = prev.get(k)) path.unshift(step.load);
+        for (let k = stateKey(s), step = prev.get(k); step; k = step.from, step = prev.get(k)) path.unshift(step.load);
         return path;
       }
       const here = s.side.map((_, i) => i).filter((i) => s.side[i] === s.boat);
       for (const load of subsets(here, p.capacity)) {
         if (boatProblem(p, load) || tripConflict(p, s, load)) continue;
         const n = cross(s, load);
-        const k = key(n);
+        const k = stateKey(n);
         if (!prev.has(k)) {
-          prev.set(k, { from: key(s), load });
+          prev.set(k, { from: stateKey(s), load });
           next.push(n);
         }
       }

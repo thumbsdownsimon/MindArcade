@@ -22,13 +22,13 @@ export const GAMES: GameMeta[] = [
     measures:
       'How you approach a problem: do you plan the whole crossing before you sail, or discover the rules by trial and error? We track planning time, trips used versus the minimum, and failed attempts.',
     howTo: [
-      'Eight puzzles, drawn at random each time: 1 warm-up, 2 medium, 3 hard and 2 expert. Each puzzle shows its rules and the fewest trips possible.',
+      'Eight puzzles: 1 warm-up, 2 medium, 3 hard and 2 expert. Most are new animal mixes generated for each game, the rest are named classics. Each puzzle shows its rules and the fewest trips possible.',
       'Usually a sailor rows the raft and guards the bank he is on. Click a character to board them, then press Sail. Passengers stay on board until you click them off.',
       'Animals left without the sailor eat each other: fox eats chicken, chicken eats larva, the black fox eats almost everyone, the bear eats sheep and foxes, and wolves eat a sheep when they outnumber the sheep. A sheepdog stops the eating on its bank (but not the bear), and the bear takes two seats.',
       "Expert puzzles may have no sailor: then only the police officer, father or mother can row, and the rules apply on both banks and on the raft. The thief robs the family when the police officer isn't there, the father can't be with a daughter without the mother, and the mother can't be with a son without the father.",
       'Drag to look around and scroll to zoom. Hover over a character to see who they are.',
     ],
-    practice: 'Two easy puzzles, one with a sailor and one without, with a Hint button that shows the best next trip.',
+    practice: 'Two short puzzles, one with a sailor and one without, with a Hint button that shows the best next trip.',
     duration: '10–15 min',
     accent: '#0891b2',
     Icon: FerryIcon,
