@@ -1,16 +1,48 @@
-import { Suspense, useState, type CSSProperties } from 'react';
+import { Suspense, useState, type CSSProperties, type ReactNode } from 'react';
 import type { GameMeta, GameResult } from '../lib/types';
 import { bestScore, gameHistory, saveResult } from '../lib/storage';
 import { ArrowLeft, CheckIcon, ClockIcon, PlayIcon, RetryIcon, TargetIcon } from './Icons';
 import ResultsView from './ResultsView';
 
-type Phase = 'intro' | 'practice' | 'practiceDone' | 'play' | 'results';
+type Phase = 'intro' | 'practice' | 'practiceDone' | 'play' | 'results' | 'retry' | 'retryDone';
+
+/** The card shown after an unscored round (practice or retry). */
+function RoundDone({ tag, title, text, result, children }: { tag: string; title: string; text: string; result: GameResult | null; children: ReactNode }) {
+  return (
+    <div className="card intro-card practice-done">
+      <span className="practice-done-icon">
+        <CheckIcon size={30} />
+      </span>
+      <span className="practice-tag">{tag}</span>
+      <h1>{title}</h1>
+      <p className="muted">{text}</p>
+      {result && result.metrics.length > 0 && (
+        <div className="practice-metrics">
+          {result.metrics.slice(0, 4).map((m) => (
+            <div key={m.label} className="card-inset practice-metric">
+              <strong>{m.value}</strong>
+              <span className="muted small">{m.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {result?.improvements[0] && (
+        <p className="practice-tip">
+          <TargetIcon /> <span>{result.improvements[0]}</span>
+        </p>
+      )}
+      <div className="practice-done-actions">{children}</div>
+    </div>
+  );
+}
 
 export default function GameShell({ game }: { game: GameMeta }) {
   const [phase, setPhase] = useState<Phase>('intro');
   const [run, setRun] = useState(0);
   const [result, setResult] = useState<GameResult | null>(null);
-  const [practiceResult, setPracticeResult] = useState<GameResult | null>(null);
+  // Result of the last unscored round (practice or retry), and the items a retry round replays.
+  const [roundResult, setRoundResult] = useState<GameResult | null>(null);
+  const [retryItems, setRetryItems] = useState<unknown[]>([]);
   const [prevBest, setPrevBest] = useState<number | null>(null);
   const [prevPlays, setPrevPlays] = useState(0);
 
@@ -23,14 +55,15 @@ export default function GameShell({ game }: { game: GameMeta }) {
     window.scrollTo(0, 0);
   }
 
-  // Practice results are never saved: they only tell the player they're ready.
-  function finishPractice(r: GameResult) {
-    setPracticeResult(r);
-    setPhase('practiceDone');
+  // Practice and retry results are never saved: they only show how the round went.
+  function finishRound(r: GameResult) {
+    setRoundResult(r);
+    setPhase(phase === 'practice' ? 'practiceDone' : 'retryDone');
     window.scrollTo(0, 0);
   }
 
-  function go(next: 'practice' | 'play') {
+  function go(next: 'practice' | 'play' | 'retry', items?: unknown[]) {
+    if (items) setRetryItems(items);
     setRun((n) => n + 1);
     setPhase(next);
     window.scrollTo(0, 0);
@@ -41,12 +74,13 @@ export default function GameShell({ game }: { game: GameMeta }) {
   if (phase === 'results' && result)
     return (
       <div style={style}>
-        <ResultsView game={game} result={result} prevBest={prevBest} prevPlays={prevPlays} onReplay={() => go('play')} onPractice={() => go('practice')} />
+        <ResultsView game={game} result={result} prevBest={prevBest} prevPlays={prevPlays} onReplay={() => go('play')} onPractice={() => go('practice')} onRetry={(items) => go('retry', items)} />
       </div>
     );
 
-  if (phase === 'practice' || phase === 'play') {
+  if (phase === 'practice' || phase === 'play' || phase === 'retry') {
     const practice = phase === 'practice';
+    const retrying = phase === 'retry';
     return (
       <div style={style} className="play">
         <div className="play-bar">
@@ -58,7 +92,13 @@ export default function GameShell({ game }: { game: GameMeta }) {
               <game.Icon size={18} />
             </span>
             <strong>{game.title}</strong>
-            {practice ? <span className="practice-tag">Practice</span> : <span className="skill-tag">{game.skill}</span>}
+            {practice ? (
+              <span className="practice-tag">Practice</span>
+            ) : retrying ? (
+              <span className="practice-tag">Retry round</span>
+            ) : (
+              <span className="skill-tag">{game.skill}</span>
+            )}
           </div>
           <span className="play-bar-spacer">
             {practice && (
@@ -69,7 +109,12 @@ export default function GameShell({ game }: { game: GameMeta }) {
           </span>
         </div>
         <Suspense fallback={<div className="stage game-loading">Loading game…</div>}>
-          <game.Component key={run} practice={practice} onFinish={practice ? finishPractice : finish} />
+          <game.Component
+            key={run}
+            practice={practice}
+            retry={retrying ? retryItems : undefined}
+            onFinish={practice || retrying ? finishRound : finish}
+          />
         </Suspense>
       </div>
     );
@@ -78,42 +123,47 @@ export default function GameShell({ game }: { game: GameMeta }) {
   if (phase === 'practiceDone')
     return (
       <div style={style} className="intro">
-        <div className="card intro-card practice-done">
-          <span className="practice-done-icon">
-            <CheckIcon size={30} />
-          </span>
-          <span className="practice-tag">Practice complete</span>
-          <h1>You're ready for the real test</h1>
-          <p className="muted">
-            The real {game.title} is {game.duration} long and is scored. Practice rounds are never saved, so feel free to practise again
-            if anything felt unclear.
-          </p>
-          {practiceResult && practiceResult.metrics.length > 0 && (
-            <div className="practice-metrics">
-              {practiceResult.metrics.slice(0, 4).map((m) => (
-                <div key={m.label} className="card-inset practice-metric">
-                  <strong>{m.value}</strong>
-                  <span className="muted small">{m.label}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {practiceResult?.improvements[0] && (
-            <p className="practice-tip">
-              <TargetIcon /> <span>{practiceResult.improvements[0]}</span>
-            </p>
-          )}
-          <div className="practice-done-actions">
-            <button className="btn btn-secondary btn-lg" onClick={() => go('practice')}>
-              <RetryIcon /> Practise again
-            </button>
-            <button className="btn btn-primary btn-lg accent-btn" onClick={() => go('play')}>
-              <PlayIcon /> Start the real test
-            </button>
-          </div>
-        </div>
+        <RoundDone
+          tag="Practice complete"
+          title="You're ready for the real test"
+          text={`The real ${game.title} is ${game.duration} long and is scored. Practice rounds are never saved, so feel free to practise again if anything felt unclear.`}
+          result={roundResult}
+        >
+          <button className="btn btn-secondary btn-lg" onClick={() => go('practice')}>
+            <RetryIcon /> Practise again
+          </button>
+          <button className="btn btn-primary btn-lg accent-btn" onClick={() => go('play')}>
+            <PlayIcon /> Start the real test
+          </button>
+        </RoundDone>
       </div>
     );
+
+  if (phase === 'retryDone') {
+    const again = roundResult?.retry;
+    return (
+      <div style={style} className="intro">
+        <RoundDone
+          tag="Retry round complete"
+          title={again ? 'Getting there' : 'All perfect'}
+          text="Retry rounds aren't scored, so your test result stays as it was."
+          result={roundResult}
+        >
+          <button className="btn btn-secondary btn-lg" onClick={() => setPhase('results')}>
+            <ArrowLeft /> Back to results
+          </button>
+          {again && (
+            <button className="btn btn-secondary btn-lg" onClick={() => go('retry', again.items)}>
+              <TargetIcon /> {again.label}
+            </button>
+          )}
+          <button className="btn btn-primary btn-lg accent-btn" onClick={() => go('play')}>
+            <PlayIcon /> Play again
+          </button>
+        </RoundDone>
+      </div>
+    );
+  }
 
   return (
     <div style={style} className="intro">

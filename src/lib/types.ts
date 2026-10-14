@@ -29,12 +29,19 @@ export interface GameResult {
   strengths: string[];
   improvements: string[];
   chart?: ResultChart;
+  /**
+   * An unscored follow-up round the results page offers, e.g. the ferry puzzles that weren't solved perfectly.
+   * `items` is handed back to the same game as `GameProps.retry`.
+   */
+  retry?: { label: string; items: unknown[] };
 }
 
 export interface GameProps {
   onFinish: (result: GameResult) => void;
   /** A short, untimed (or gentler) warm-up with extra explanations. Its result is not saved. */
   practice: boolean;
+  /** Set for a retry round: the `retry.items` of an earlier result. Its result is not saved. */
+  retry?: unknown[];
 }
 
 export interface GameMeta {

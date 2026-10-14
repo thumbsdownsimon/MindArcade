@@ -124,9 +124,10 @@ interface Props {
   prevPlays: number;
   onReplay: () => void;
   onPractice: () => void;
+  onRetry: (items: unknown[]) => void;
 }
 
-export default function ResultsView({ game, result, prevBest, prevPlays, onReplay, onPractice }: Props) {
+export default function ResultsView({ game, result, prevBest, prevPlays, onReplay, onPractice, onRetry }: Props) {
   const v = verdict(result.score);
   const comparison =
     prevBest === null
@@ -203,7 +204,12 @@ export default function ResultsView({ game, result, prevBest, prevPlays, onRepla
       <ProgressChart game={game} />
 
       <div className="results-actions">
-        <button className="btn btn-primary btn-lg accent-btn" onClick={onReplay}>
+        {result.retry && (
+          <button className="btn btn-primary btn-lg accent-btn" onClick={() => onRetry(result.retry!.items)}>
+            <TargetIcon /> {result.retry.label}
+          </button>
+        )}
+        <button className={`btn btn-lg ${result.retry ? 'btn-secondary' : 'btn-primary accent-btn'}`} onClick={onReplay}>
           <RetryIcon /> Play again
         </button>
         <button className="btn btn-secondary btn-lg" onClick={onPractice}>

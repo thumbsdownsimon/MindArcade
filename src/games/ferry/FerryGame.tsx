@@ -25,6 +25,7 @@ import FerryScene, { SAIL_MS, lookFor } from './FerryScene';
 import './ferry.css';
 
 interface Rec {
+  puzzle: Puzzle;
   title: string;
   min: number;
   crossings: number;
@@ -112,8 +113,22 @@ function describeTrip(p: Puzzle, load: number[], boat: 0 | 1) {
   return `Take ${list} ${dir}.`;
 }
 
-export default function FerryGame({ onFinish, practice }: GameProps) {
-  const [puzzles] = useState(() => (practice ? PRACTICE : pickRun()));
+/** Fewest trips and nobody lost. */
+const isPerfect = (r: Rec) => r.solved && r.crossings === r.min && r.failures === 0;
+
+/** How the previous attempt at a puzzle went, for the retry round. */
+function lastTry(r: Rec) {
+  if (!r.solved) return 'Last time you skipped this one.';
+  const failed = r.failures ? ` and had ${r.failures} failed attempt${r.failures > 1 ? 's' : ''}` : '';
+  return `Last time you used ${r.crossings} trips${failed}.`;
+}
+
+export default function FerryGame({ onFinish, practice, retry: retryItems }: GameProps) {
+  // A retry round replays the records of puzzles that weren't solved perfectly in the test.
+  const review = retryItems as Rec[] | undefined;
+  const [puzzles] = useState(() => (practice ? PRACTICE : review ? review.map((r) => r.puzzle) : pickRun()));
+  // The real test hides the fewest possible trips and the hints, so it measures your own planning.
+  const guided = practice || !!review;
   const [mins] = useState(() => puzzles.map((p) => minCrossings(p) ?? 99));
   const [idx, setIdx] = useState(0);
   const p = puzzles[idx];
@@ -201,6 +216,7 @@ export default function FerryGame({ onFinish, practice }: GameProps) {
     const now = performance.now();
     const min = mins[idx];
     recs.current.push({
+      puzzle: p,
       title: p.title,
       min,
       crossings: used,
@@ -218,7 +234,8 @@ export default function FerryGame({ onFinish, practice }: GameProps) {
         : { ok: false, title: 'Puzzle skipped', text: `This one can be done in ${min} trips.` },
     );
     later(() => {
-      if (idx + 1 >= puzzles.length) return onFinish(practice ? practiceResult(recs.current, hintsUsed.current) : analyse(recs.current));
+      if (idx + 1 >= puzzles.length)
+        return onFinish(practice ? practiceResult(recs.current, hintsUsed.current) : review ? retryResult(recs.current, hintsUsed.current) : analyse(recs.current));
       const n = idx + 1;
       setIdx(n);
       setSt(fresh(puzzles[n]));
@@ -250,11 +267,11 @@ export default function FerryGame({ onFinish, practice }: GameProps) {
           <span className="pill">
             Trips <strong>{crossings}</strong>
           </span>
-          <span className="pill pill-accent">Best possible: {mins[idx]}</span>
+          {guided && <span className="pill pill-accent">Best possible: {mins[idx]}</span>}
           {failures > 0 && <span className="pill pill-bad">Failed attempts: {failures}</span>}
         </div>
         <div className="hud-group">
-          {practice && (
+          {guided && (
             <button className="btn btn-secondary btn-sm" onClick={showHint} disabled={busy}>
               💡 Hint
             </button>
@@ -278,12 +295,17 @@ export default function FerryGame({ onFinish, practice }: GameProps) {
         <Rules p={p} />
       </div>
 
-      {practice && (
+      {guided && (
         <div className="explain ferry-explain">
           {hint ? (
             <>
               <strong>Hint</strong>
               {hint.text} The characters to take are marked with a yellow diamond.
+            </>
+          ) : review ? (
+            <>
+              <strong>Retry round · not scored</strong>
+              {lastTry(review[idx])} Aim for a perfect crossing: the fewest trips and nobody lost. Stuck? Press Hint.
             </>
           ) : idx === 0 ? (
             <>
@@ -369,8 +391,37 @@ function practiceResult(recs: Rec[], hints: number): GameResult {
     ],
     strengths: [],
     improvements: [
-      'The real test has 8 puzzles that get harder: wolves that count, a bear that takes two seats, a sheepdog that guards, and the police-and-thief puzzles. There are no hints.',
+      "The real test has 8 puzzles that get harder: wolves that count, a bear that takes two seats, a sheepdog that guards, and the police-and-thief puzzles. There are no hints, and the fewest possible trips stay hidden until you finish each puzzle. Afterwards you can retry the ones you didn't solve perfectly.",
     ],
+  };
+}
+
+/** Offers the puzzles that still aren't perfect for another, unscored round. */
+function retryOffer(recs: Rec[], again = false): GameResult['retry'] {
+  const left = recs.filter((r) => !isPerfect(r));
+  if (!left.length) return undefined;
+  const what = `${left.length} puzzle${left.length > 1 ? 's' : ''}`;
+  return { label: again ? `Retry the ${what} still not perfect` : `Retry the ${what} you didn't solve perfectly`, items: left };
+}
+
+function retryResult(recs: Rec[], hints: number): GameResult {
+  const perfect = recs.filter(isPerfect).length;
+  const left = recs.length - perfect;
+  return {
+    score: 0,
+    metrics: [
+      { label: 'Now perfect', value: `${perfect}/${recs.length}` },
+      { label: 'Puzzles solved', value: `${recs.filter((r) => r.solved).length}/${recs.length}` },
+      { label: 'Hints used', value: String(hints) },
+      { label: 'Passengers lost', value: String(sum(recs.map((r) => r.failures))) },
+    ],
+    strengths: [],
+    improvements: [
+      left
+        ? `${left} still not perfect. Before each trip, check who is left together, and remember that taking a passenger back is often the key move.`
+        : 'Every puzzle perfect this time. In your next test, try to see the whole crossing like this before your first trip.',
+    ],
+    retry: retryOffer(recs, true),
   };
 }
 
@@ -379,7 +430,7 @@ function analyse(recs: Rec[]): GameResult {
   const effOf = (r: Rec) => (r.solved ? Math.min(1, r.min / r.crossings) : 0);
   const eff = mean(recs.map(effOf));
   const solved = recs.filter((r) => r.solved).length;
-  const perfect = recs.filter((r) => r.solved && r.crossings === r.min && r.failures === 0).length;
+  const perfect = recs.filter(isPerfect).length;
   const clean = recs.filter((r) => r.solved && r.failures === 0).length;
   const totalFailures = sum(recs.map((r) => r.failures));
   const avgPlan = mean(recs.map((r) => r.planMs));
@@ -445,5 +496,6 @@ function analyse(recs: Rec[]): GameResult {
         display: r.solved ? `${r.crossings} trips · min ${r.min}` : `Skipped · min ${r.min}`,
       })),
     },
+    retry: retryOffer(recs),
   };
 }
